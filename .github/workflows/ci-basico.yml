@@ -39,7 +39,9 @@ jobs:
   build-e-lint:
     # Runner hospedado pelo proprio GitHub, com Ubuntu ja instalado.
     # Gratuito para repositorios publicos, com cota mensal para privados.
-    runs-on: ubuntu-latest
+    # runs-on: ubuntu-latest
+    # *** Substituação 'ubuntu-latest' por uma versão estática LTS (como 24.04)
+    runs-on: ubuntu-24.04
 
     steps:
       # -----------------------------------------------------------------
@@ -62,7 +64,9 @@ jobs:
       - name: Configurar Python 3.10
         uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          # python-version: "3.10"
+          # *** Fixar a versão do Python
+          python-version: "3.12"
 
       # -----------------------------------------------------------------
       # Passo 3: instalar as dependencias da aplicacao TaskFlow.
