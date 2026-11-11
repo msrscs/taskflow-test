@@ -26,5 +26,9 @@ COPY . .
 # que nao e apto para producao.
 EXPOSE 5000
 
+# O app.py escuta em 127.0.0.1 por padrao; no container precisa ser em
+# todas as interfaces para a porta publicada funcionar.
+ENV FLASK_RUN_HOST=0.0.0.0
+
 # FALHA 6: container roda com debug habilitado e como root.
 CMD ["python", "app.py"]

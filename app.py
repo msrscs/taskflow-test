@@ -59,7 +59,7 @@ import uuid
 from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 
-from flask import Flask, g, redirect, request, session, url_for
+from flask import Flask, g, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
 # ---------------------------------------------------------------------------
@@ -317,15 +317,9 @@ def login():
             },
         )
 
-    return f"""
-    <h1>TaskFlow - Login</h1>
-    <form method="post">
-        Usuario: <input type="text" name="username"><br>
-        Senha: <input type="password" name="password"><br>
-        <input type="submit" value="Entrar">
-    </form>
-    <p style="color:red">{error or ""}</p>
-    """
+    # Template Jinja2 com autoescape: a mensagem de erro nunca e
+    # interpretada como HTML (fecha o sink de XSS refletido no login).
+    return render_template("login.html", error=error)
 
 
 @app.route("/logout")
@@ -351,14 +345,12 @@ def tasks():
     db = get_db()
 
     if search:
-        query = (
-            "SELECT * FROM tasks WHERE user_id = "
-            + str(session["user_id"])
-            + " AND title LIKE '%"
-            + search
-            + "%'"
-        )
-        rows = db.execute(query).fetchall()
+        # Consulta parametrizada: o termo de busca vai como parametro, nunca
+        # concatenado na string SQL (evita SQL Injection pelo parametro "q").
+        rows = db.execute(
+            "SELECT * FROM tasks WHERE user_id = ? AND title LIKE ?",
+            (session["user_id"], f"%{search}%"),
+        ).fetchall()
     else:
         rows = db.execute(
             "SELECT * FROM tasks WHERE user_id = ?", (session["user_id"],)
@@ -379,25 +371,15 @@ def tasks():
         },
     )
 
-    items = ""
-    for row in rows:
-        items += f"""
-        <li>
-            <b>{row['title']}</b> - {row['description']}
-            {'(feita)' if row['done'] else ''}
-        </li>
-        """
-
-    return f"""
-    <h1>Minhas tarefas ({session['username']})</h1>
-    <form method="get">
-        <input type="text" name="q" placeholder="buscar tarefa">
-        <input type="submit" value="Buscar">
-    </form>
-    <ul>{items}</ul>
-    <a href="{url_for('new_task')}">Nova tarefa</a> |
-    <a href="{url_for('logout')}">Sair</a>
-    """
+    # Template Jinja2 com autoescape (sem "| safe"): titulo, descricao,
+    # username e o termo de busca "q" sao escapados automaticamente,
+    # fechando o XSS armazenado e o refletido pelo parametro de busca.
+    return render_template(
+        "tasks.html",
+        tasks=rows,
+        username=session["username"],
+        search=search,
+    )
 
 
 @app.route("/tasks/new", methods=["GET", "POST"])
@@ -432,14 +414,7 @@ def new_task():
         )
         return redirect(url_for("tasks"))
 
-    return """
-    <h1>Nova tarefa</h1>
-    <form method="post">
-        Titulo: <input type="text" name="title"><br>
-        Descricao: <textarea name="description"></textarea><br>
-        <input type="submit" value="Salvar">
-    </form>
-    """
+    return render_template("new_task.html")
 
 
 @app.route("/debug/info")
@@ -474,4 +449,12 @@ if __name__ == "__main__":
         "aplicacao TaskFlow (instrumentada) iniciando",
         extra={"event": "app_startup"},
     )
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    # debug controlado por variavel de ambiente e DESLIGADO por padrao: o
+    # debugger interativo do Werkzeug permite executar codigo no servidor.
+    #   export FLASK_DEBUG=true   # apenas em desenvolvimento local
+    debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() in ("1", "true", "yes")
+    # Host padrao 127.0.0.1 (so a propria maquina). Dentro de um container
+    # e preciso escutar em todas as interfaces: defina FLASK_RUN_HOST no
+    # Dockerfile/compose. Em producao, use gunicorn em vez de app.run().
+    host = os.environ.get("FLASK_RUN_HOST", "127.0.0.1")
+    app.run(host=host, port=5000, debug=debug_mode)
