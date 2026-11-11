@@ -1,53 +1,48 @@
 """
-TaskFlow - Versao INSTRUMENTADA com logging estruturado (Modulo 6).
+TaskFlow - versao corrigida da esteira DevSecOps (Modulos 1 a 6).
 
-Esta e a mesma aplicacao TaskFlow usada no restante do curso
-(ver app-exemplo/app.py), com uma camada de observabilidade adicionada
-por cima. As vulnerabilidades propositais da versao original (SQL
-Injection, XSS, senha em texto puro, segredo hardcoded, endpoint de
-debug exposto) foram MANTIDAS de proposito - o objetivo deste modulo
-NAO e corrigi-las, e sim demonstrar como enxergar sintomas desses
-problemas (e de tentativas de exploracao) atraves de logs estruturados.
+Aplicacao Flask de lista de tarefas usada na disciplina. Partindo da
+versao vulneravel original (app-exemplo/app.py), esta versao corrige as
+vulnerabilidades de codigo e mantem a camada de observabilidade do
+Modulo 6.
 
-O que foi adicionado nesta versao:
-  1. Configuracao de logging em formato JSON (um objeto JSON por linha,
-     tambem chamado de "JSON Lines" ou NDJSON), usando APENAS a
-     biblioteca padrao `logging` do Python + um Formatter customizado.
+Correcoes de seguranca aplicadas:
+  1. SQL Injection (login e busca "q")   -> consultas parametrizadas
+  2. XSS armazenado e refletido          -> templates Jinja2 com autoescape
+                                            (templates/, sem "| safe"),
+                                            incluindo o parametro "q" e a
+                                            mensagem de erro do login
+  3. SECRET_KEY hardcoded                -> variavel TASKFLOW_SECRET_KEY,
+                                            sem fallback
+  4. Senhas em texto puro                -> hash (Werkzeug) e senhas
+                                            iniciais lidas do ambiente
+  5. Endpoint /debug/info exposto        -> removido
+  6. debug=True fixo                     -> FLASK_DEBUG, desligado por padrao
+  7. app.run em 0.0.0.0 fixo             -> FLASK_RUN_HOST, padrao 127.0.0.1
 
-     Por que nao usamos a lib `python-json-logger` aqui?
-     Ela e uma otima opcao de mercado (mais concisa, com suporte a
-     campos extra "de fabrica"), e fica registrada como alternativa em
-     `requirements-observabilidade.txt` (comentada) para quem quiser
-     experimentar. Optamos por escrever nosso proprio Formatter neste
-     exemplo para os alunos verem exatamente o que acontece por baixo
-     dos panos: como cada registro de log vira um dicionario e depois
-     um JSON - isso e didaticamente mais valioso no primeiro contato
-     com logging estruturado do que importar uma lib pronta.
+Observabilidade (Modulo 6):
+  - Logs em JSON (um objeto por linha / NDJSON) com um Formatter proprio
+    sobre a biblioteca padrao `logging`.
+  - `request_id` (UUID v4) gerado no `before_request` e anexado a todos os
+    logs da requisicao, para correlacao no Grafana/Loki.
+  - Eventos: http_request, login_attempt (sucesso/falha), logout,
+    task_created e tasks_list_accessed.
+  - Nada sensivel e logado: nunca a senha, o cookie ou o token; da tarefa
+    so vai o tamanho da descricao.
+  - Saida em stdout e no arquivo logs/taskflow.log (lido pelo Promtail).
 
-  2. Um `request_id` (UUID v4) gerado a cada requisicao HTTP, no hook
-     `before_request` do Flask, e anexado a TODOS os logs emitidos
-     durante aquela requisicao. Isso permite correlacionar, em uma
-     stack de observabilidade (Grafana/Loki), todos os eventos de log
-     pertencentes a uma unica jornada de requisicao - essencial para
-     investigar incidentes.
+Variaveis de ambiente:
+  TASKFLOW_SECRET_KEY      obrigatoria - chave de sessao do Flask
+  TASKFLOW_ADMIN_PASSWORD  senha inicial do usuario "admin" (opcional)
+  TASKFLOW_ALUNO_PASSWORD  senha inicial do usuario "aluno" (opcional)
+  FLASK_DEBUG              "true" so em desenvolvimento (padrao: false)
+  FLASK_RUN_HOST           interface de escuta (padrao: 127.0.0.1)
 
-  3. Eventos de negocio/seguranca logados explicitamente:
-       - login_attempt (sucesso ou falha, SEM logar a senha)
-       - task_created
-       - tasks_list_accessed
-
-  4. Cuidado deliberado para NAO logar dados sensiveis em claro:
-     a senha nunca aparece nos logs; quando precisamos de algum tipo
-     de "pista" sobre um dado sensivel (ex.: para debugar duplicidade
-     de usuario), preferimos logar um hash curto em vez do valor.
-
-Para rodar:
-    pip install -r requirements-observabilidade.txt
-    python app_instrumented.py
-
-A aplicacao grava logs em dois lugares ao mesmo tempo:
-  - stdout (para quem quiser rodar via `docker compose logs`)
-  - arquivo `logs/taskflow.log` (para o Promtail ler e enviar ao Loki)
+Para rodar localmente:
+    pip install -r requirements.txt
+    export TASKFLOW_SECRET_KEY="$(openssl rand -hex 32)"
+    export TASKFLOW_ADMIN_PASSWORD="<senha>"
+    python app.py
 """
 
 import json
@@ -417,29 +412,10 @@ def new_task():
     return render_template("new_task.html")
 
 
-@app.route("/debug/info")
-def debug_info():
-    # Vulnerabilidade mantida de proposito - endpoint de debug exposto
-    # sem autenticacao (ver app-exemplo/app.py). Logamos o acesso a ele
-    # com nivel WARNING, pois e um recurso sensivel que nunca deveria
-    # ser publico.
-    import platform
-    import sys
-
-    logger.warning(
-        "acesso ao endpoint de debug",
-        extra={
-            "event": "sensitive_endpoint_accessed",
-            "path": "/debug/info",
-            "ip": request.remote_addr,
-            "request_id": g.get("request_id"),
-        },
-    )
-
-    return {
-        "python_version": sys.version,
-        "platform": platform.platform(),
-    }
+# O endpoint /debug/info foi REMOVIDO (Modulo 4): ele expunha, sem
+# autenticacao, detalhes do ambiente (e, na versao original, a SECRET_KEY).
+# Se for preciso um health check, crie uma rota que devolva apenas
+# {"status": "ok"}, sem nenhum dado interno.
 
 
 if __name__ == "__main__":
