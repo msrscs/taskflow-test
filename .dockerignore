@@ -1,0 +1,16 @@
+# Nada disso deve ir para dentro da imagem (segredos, estado local, lixo)
+.git/
+.github/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.env
+.env.*
+*.db
+*.sqlite3
+logs/
+codigo/
+docs/
+.zap/
+*Zone.Identifier

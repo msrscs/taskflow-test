@@ -45,16 +45,27 @@ Para rodar localmente:
     python app.py
 """
 
+import hmac
 import json
 import logging
 import os
+import secrets
 import sqlite3
 import time
 import uuid
 from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 
-from flask import Flask, g, redirect, render_template, request, session, url_for
+from flask import (
+    Flask,
+    abort,
+    g,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 from werkzeug.security import check_password_hash, generate_password_hash
 
 # ---------------------------------------------------------------------------
@@ -146,6 +157,15 @@ if not _secret_key:
     )
 app.config["SECRET_KEY"] = _secret_key
 
+# Cookie de sessao: inacessivel ao JavaScript e nao enviado em requisicoes
+# cross-site (defesa extra contra roubo de sessao e CSRF). Em producao com
+# HTTPS, defina tambem TASKFLOW_SECURE_COOKIE=true.
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = (
+    os.environ.get("TASKFLOW_SECURE_COOKIE", "false").lower() == "true"
+)
+
 DATABASE = "taskflow.db"
 
 
@@ -222,6 +242,60 @@ def init_db():
 def gerar_request_id():
     g.request_id = str(uuid.uuid4())
     g.start_time = time.time()
+
+
+# ---------------------------------------------------------------------------
+# Protecao CSRF (sem dependencia extra): um token aleatorio por sessao e
+# incluido como campo oculto "csrf_token" em todo formulario POST e
+# conferido aqui antes de qualquer view. Detectado pelo ZAP (regra 10202).
+# ---------------------------------------------------------------------------
+def csrf_token():
+    if "_csrf_token" not in session:
+        session["_csrf_token"] = secrets.token_urlsafe(32)
+    return session["_csrf_token"]
+
+
+app.jinja_env.globals["csrf_token"] = csrf_token
+
+
+@app.before_request
+def validar_csrf():
+    if request.method != "POST":
+        return
+    esperado = session.get("_csrf_token")
+    recebido = request.form.get("csrf_token", "")
+    if not esperado or not hmac.compare_digest(esperado, recebido):
+        logger.warning(
+            "token CSRF ausente ou invalido",
+            extra={
+                "event": "csrf_rejected",
+                "path": request.path,
+                "ip": request.remote_addr,
+                "request_id": g.get("request_id"),
+            },
+        )
+        abort(400)
+
+
+# ---------------------------------------------------------------------------
+# Cabecalhos de seguranca em todas as respostas (achados do ZAP Baseline:
+# 10020, 10021, 10036, 10038, 10063 e 90004).
+# ---------------------------------------------------------------------------
+@app.after_request
+def adicionar_cabecalhos_de_seguranca(response):
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "frame-ancestors 'none'; form-action 'self'; base-uri 'self'; "
+        "object-src 'none'"
+    )
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "same-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+    response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+    response.headers["Cross-Origin-Embedder-Policy"] = "require-corp"
+    return response
 
 
 @app.after_request
@@ -433,4 +507,10 @@ if __name__ == "__main__":
     # e preciso escutar em todas as interfaces: defina FLASK_RUN_HOST no
     # Dockerfile/compose. Em producao, use gunicorn em vez de app.run().
     host = os.environ.get("FLASK_RUN_HOST", "127.0.0.1")
+    # O servidor de desenvolvimento do Werkzeug sempre anuncia a propria
+    # versao e a do Python no header "Server" (ZAP 10036). Escondemos.
+    from werkzeug.serving import WSGIRequestHandler
+
+    WSGIRequestHandler.server_version = "TaskFlow"
+    WSGIRequestHandler.sys_version = ""
     app.run(host=host, port=5000, debug=debug_mode)

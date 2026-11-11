@@ -28,6 +28,7 @@ qualquer chave dupla dentro de comentarios HTML.
     <h1>TaskFlow - Login</h1>
 
     <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         Usuario: <input type="text" name="username"><br>
         Senha: <input type="password" name="password"><br>
         <input type="submit" value="Entrar">
@@ -35,7 +36,7 @@ qualquer chave dupla dentro de comentarios HTML.
 
     {% if error %}
         {# "error" passa pelo autoescape do Jinja2 automaticamente. #}
-        <p style="color:red">{{ error }}</p>
+        <p role="alert"><strong>{{ error }}</strong></p>
     {% endif %}
 
 </body>

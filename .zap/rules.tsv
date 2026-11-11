@@ -1,0 +1,9 @@
+# Regras do ZAP Baseline para a TaskFlow (formato: id<TAB>ACAO<TAB>justificativa).
+# Qualquer alerta que NAO esteja aqui reprova o job (fail_action: true, sem -I).
+# So rebaixamos para IGNORE alertas informativos ou que nao se aplicam, sempre com o motivo.
+10031	IGNORE	(User Controllable HTML Element Attribute) O parametro q volta no atributo value do campo de busca, mas passa pelo autoescape do Jinja2 (aspas viram &#34;). E um alerta informativo; o teste de XSS refletido no q confirma que nao ha injecao.
+10049	IGNORE	(Non-Storable Content) Informativo: paginas com sessao nao devem ir para cache compartilhado; nao e vulnerabilidade.
+10094	IGNORE	(Base64 Disclosure) O valor em Base64 e o token CSRF aleatorio e o cookie de sessao assinado do Flask; nao ha dado sensivel codificado.
+10111	IGNORE	(Authentication Request Identified) Informativo: o ZAP apenas identificou o formulario de login.
+10112	IGNORE	(Session Management Response Identified) Informativo: o ZAP apenas identificou o cookie de sessao.
+90005	IGNORE	(Sec-Fetch-Dest Header is Missing) Verifica cabecalhos da REQUISICAO enviada pelo proprio ZAP, nao da resposta do servidor; nao se aplica a aplicacao.
