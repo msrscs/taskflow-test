@@ -1,0 +1,32 @@
+# Bytecode Python (pode conter segredos de versoes antigas do codigo)
+__pycache__/
+*.py[cod]
+
+# Arquivos de ambiente com segredos reais
+.env
+.env.*
+!.env.example
+
+# Ambientes virtuais
+.venv/
+venv/
+env/
+
+# Pasta codigo
+codigo/
+
+# Bancos SQLite locais
+*.db
+*.sqlite3
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# Metadados de arquivos copiados do Windows
+*:Zone.Identifier
+*Zone.Identifier
+
+# Logs da aplicacao
+logs/
