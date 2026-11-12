@@ -461,6 +461,7 @@ aprovação de um code owner, o merge ficou bloqueado pelo Semgrep:
     ├── owasp-mapeamento.md     # achados (ZAP e demais) -> OWASP Top 10:2025
     ├── demo-shift-left.md      # roteiro da demo do gate barrando o PR
     ├── lynis.md                # auditoria do host: 3 achados, índice 66 -> 68
+    ├── roteiro-apresentacao.md # quem fala o quê, tempos, demos ao vivo e plano B
     └── evidencias/             # antes × depois + observabilidade
 ```
 
