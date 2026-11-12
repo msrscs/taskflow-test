@@ -17,7 +17,7 @@ Flask==3.1.3
 Jinja2==3.1.6
 Werkzeug==3.1.9
 PyYAML==6.0.2
-requests==2.33.0
+requests==2.34.2
 markupsafe==3.0.4
 itsdangerous==2.2.0
 # Driver do PostgreSQL (psycopg 3), usado quando DATABASE_URL esta definida
