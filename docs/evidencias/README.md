@@ -32,6 +32,26 @@ Mapeamento de cada achado para o OWASP Top 10:2025:
 shift-left (Semgrep e ZAP ficando vermelhos com uma falha introduzida):
 [`demo-shift-left.txt`](demo-shift-left.txt).
 
+## Prints
+
+Capturados em 12/11/2026. Os prints do Grafana são todos da mesma
+simulação (20:12–20:13, horário de Brasília): o usuário legítimo `172.21.0.1`
+errou a senha 2 vezes e entrou, e em seguida o atacante `172.21.0.4` fez 50
+tentativas em 16 s.
+
+| Print | O que prova |
+|---|---|
+| [`demo-checks-vermelhos.png`](demo-checks-vermelhos.png) | Demo de shift-left: o PR #18 reintroduz `\| safe` e o `SAST - Semgrep` falha (os outros 8 checks passam) |
+| [`demo-merge-bloqueado.png`](demo-merge-bloqueado.png) | Mesmo **aprovado por um code owner**, o merge fica bloqueado porque o Semgrep é required check |
+| [`demo-checks-verdes.png`](demo-checks-verdes.png) | Depois do revert, os 9 checks passam |
+| [`grafana-forca-bruta.png`](grafana-forca-bruta.png) | Dashboard: 52 falhas de login, pico de 50 do IP atacante acima do limite (10) e o IP legítimo com 2 |
+| [`grafana-alerta.png`](grafana-alerta.png) | Regra provisionada pelo repositório em **Firing**: `172.21.0.4` em *Alerting* e `172.21.0.1` em *Normal* (sem falso positivo) |
+| [`grafana-explore-request-id.png`](grafana-explore-request-id.png) | Q3: uma requisição do atacante rastreada pelo `request_id` (`POST /login`, IP, status) |
+| [`grafana-explore-sem-senha.png`](grafana-explore-sem-senha.png) | `{job="taskflow"} \|= "tentativa"` → *No logs found*: nenhuma das 50 senhas testadas foi gravada nos logs |
+
+A auditoria do host com Lynis (antes 66, depois 68, warning eliminado) está
+em [`../lynis.md`](../lynis.md).
+
 ## Observações (importantes para a apresentação)
 
 - **O ZAP Baseline é passivo.** Ele analisa respostas e cabeçalhos, mas não
