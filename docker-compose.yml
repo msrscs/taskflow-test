@@ -6,6 +6,7 @@
 # Uso:
 #   cp .env.example .env          # e preencha com valores aleatorios (ver .env.example)
 #   docker compose up -d --build
+#   docker compose --profile observabilidade up -d --build   # + Grafana/Loki/Promtail
 #   docker compose ps             # os dois servicos devem ficar "healthy"
 #
 # Itens exigidos pelo PDF e onde estao:
@@ -125,6 +126,127 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  # ===========================================================================
+  # Observabilidade (Modulo 6): Promtail -> Loki -> Grafana.
+  # So sobem com o profile:  docker compose --profile observabilidade up -d
+  # Mesmo hardening da app: imagens por digest, read_only, cap_drop ALL,
+  # no-new-privileges, usuario nao-root e limites de recursos.
+  # Unica porta publicada: Grafana em 127.0.0.1:3000.
+  # ===========================================================================
+  loki:
+    image: grafana/loki:3.7.9@sha256:0db216b630ae1f348a1584c67f3cead8b4c1fc839169a39501db664744158e28
+    profiles: ["observabilidade"]
+    command: ["-config.file=/etc/loki/loki-config.yml"]
+    # SEM "ports:": o Loki so e alcancado pela rede interna (Grafana e
+    # Promtail). Ninguem de fora consegue ler ou injetar logs.
+    networks:
+      - observabilidade
+    user: "10001:10001"
+    read_only: true
+    volumes:
+      - ./observabilidade/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki_data:/loki
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m,uid=10001,gid=10001,mode=0700
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+          pids: 200
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:3.6.11@sha256:a761cb834cfaeee29745440d4884d6748f0a08d8f68928db1d707018c1dcfbe9
+    profiles: ["observabilidade"]
+    command: ["-config.file=/etc/promtail/config.yml"]
+    networks:
+      - observabilidade
+    # Roda com o mesmo UID da app (10001), dono dos arquivos de log, em vez
+    # de root (padrao da imagem). Le os logs SOMENTE LEITURA.
+    user: "10001:10001"
+    read_only: true
+    volumes:
+      - ./observabilidade/promtail-config.yml:/etc/promtail/config.yml:ro
+      - app_data:/var/log/taskflow:ro
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m,uid=10001,gid=10001,mode=0700
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+          pids: 100
+    depends_on:
+      - loki
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:13.3.1@sha256:0615ec4fbd4072004b7d86b46ded63013a74b7d6eb1119273dd89e8fa25c13cf
+    profiles: ["observabilidade"]
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      # Senha do admin vem do .env (nada de admin/admin do material de aula).
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?defina GRAFANA_ADMIN_PASSWORD no .env}
+      # Sem acesso anonimo e sem auto-cadastro de usuarios.
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_USERS_ALLOW_ORG_CREATE: "false"
+      # Cookies de sessao mais restritos; sem Gravatar (vazaria e-mails).
+      GF_SECURITY_COOKIE_SAMESITE: strict
+      GF_SECURITY_DISABLE_GRAVATAR: "true"
+      GF_SECURITY_X_CONTENT_TYPE_OPTIONS: "true"
+      GF_SECURITY_X_XSS_PROTECTION: "true"
+      # Sem telemetria, verificacao de atualizacoes nem plugins baixados
+      # da internet na inicializacao (so os embutidos na imagem).
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+    # frontend: porta publicada. observabilidade: fala com o Loki.
+    networks:
+      - frontend
+      - observabilidade
+    user: "472:0"
+    read_only: true
+    volumes:
+      - grafana_data:/var/lib/grafana
+      # Datasource, dashboard e regra de alerta versionados no Git.
+      - ./observabilidade/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observabilidade/grafana/dashboards:/etc/grafana/dashboards:ro
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m,uid=472,gid=0,mode=0700
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+          pids: 200
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      - loki
+    restart: unless-stopped
+
 networks:
   # Rede de entrada: a da porta publicada.
   frontend:
@@ -135,10 +257,17 @@ networks:
   backend:
     driver: bridge
     internal: true
+  # Rede da stack de observabilidade, tambem interna: Loki e Promtail nao
+  # tem saida para a internet nem porta no host.
+  observabilidade:
+    driver: bridge
+    internal: true
 
 volumes:
   app_data:
   db_data:
+  loki_data:
+  grafana_data:
 
 # Nenhum servico monta /var/run/docker.sock (isso daria controle total do
 # host a quem comprometer o container).

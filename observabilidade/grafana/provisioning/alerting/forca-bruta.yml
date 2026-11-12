@@ -1,0 +1,61 @@
+# Regra de alerta de FORCA BRUTA no login (condicao de disparo do runbook
+# docs/runbook-forca-bruta.md).
+#
+# Dispara quando um mesmo IP acumula MAIS DE 10 falhas de login em 5
+# minutos. A query e exatamente a "query de deteccao" do runbook.
+#
+# Avaliada a cada 1 minuto. O estado (Normal / Firing) aparece em
+# Alerting -> Alert rules no Grafana. Neste lab nao ha ponto de contato
+# (e-mail, Slack) configurado; num ambiente real, o alerta notificaria o
+# plantao de seguranca.
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: seguranca
+    folder: TaskFlow
+    interval: 1m
+    rules:
+      - uid: taskflow-forca-bruta-login
+        title: "Forca bruta no login (> 10 falhas/IP em 5 min)"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              refId: A
+              queryType: instant
+              instant: true
+              expr: 'sum by (ip) (count_over_time({job="taskflow", event="login_attempt"} | json | result="failure" [5m]))'
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params:
+                      - 10
+        # Sem dados (nenhuma falha de login) = situacao normal, nao alerta.
+        noDataState: OK
+        execErrState: Error
+        for: 0s
+        labels:
+          severidade: alta
+          categoria: autenticacao
+        annotations:
+          summary: "Possivel forca bruta no login a partir de {{ $labels.ip }}"
+          description: "{{ $values.B }} falhas de login do IP {{ $labels.ip }} nos ultimos 5 minutos (limite: 10)."
+          runbook_url: "https://github.com/msrscs/taskflow-test/blob/main/docs/runbook-forca-bruta.md"

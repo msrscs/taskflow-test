@@ -1,0 +1,13 @@
+# Carrega os dashboards (JSON) de /etc/grafana/dashboards na pasta
+# "TaskFlow". allowUiUpdates: false -> o dashboard versionado no Git e o
+# que vale; alteracoes pela interface nao sao salvas por cima dele.
+apiVersion: 1
+
+providers:
+  - name: taskflow
+    folder: TaskFlow
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /etc/grafana/dashboards

@@ -1,0 +1,24 @@
+# Resultado das consultas LogQL (via API do Grafana -> datasource Loki), logo apos a simulacao
+
+## Q1 (deteccao, usada no alerta e no runbook): sum by (ip) (count_over_time({job="taskflow", event="login_attempt"} | json | result="failure" [5m]))
+   {'ip': '172.22.0.1'} => 2
+   {'ip': '172.22.0.4'} => 50
+
+## Q2: sum by (status_code) (count_over_time({job="taskflow", event="http_request"} | json [15m]))
+   {'status_code': '200'} => 113
+   {'status_code': '302'} => 1
+   (os 200 incluem o healthcheck do Compose, que acessa /login a cada 30s)
+
+## Q3: {job="taskflow"} | json | request_id="5510bd72-4467-4600-8766-644ae4dc9d34"   (1a tentativa do ataque)
+   linhas: 2
+    {"timestamp": "2026-11-12T15:05:27.002391+00:00", "level": "INFO", "logger": "taskflow", "message": "requisicao finalizada", "event": "http_request", "request_id": "5510bd72-4467-4600-8766-644ae4dc9d3
+
+## Q4: topk(5, sum by (username) (count_over_time({job="taskflow", event="login_attempt"} | json | result="failure" [15m])))
+   {'username': 'admin'} => 52
+
+## Q5 (houve comprometimento?): sum by (ip) (count_over_time({job="taskflow", event="login_attempt"} | json | result="success" [15m]))
+   {'ip': '172.22.0.1'} => 1
+   (o unico sucesso e do IP legitimo 172.22.0.1; o IP atacante 172.22.0.4 nao tem nenhum)
+
+## Nenhuma senha nos logs: {job="taskflow"} |= "tentativa"
+   linhas: 0

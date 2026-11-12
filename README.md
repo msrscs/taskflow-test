@@ -25,6 +25,7 @@ protegida por uma esteira de CI segura no GitHub Actions. Cada ferramenta é um
 - [Como executar com Docker (hardened)](#como-executar-com-docker-hardened)
 - [Como executar com Docker Compose (app + PostgreSQL)](#como-executar-com-docker-compose-app--postgresql)
 - [Infraestrutura como código (Terraform)](#infraestrutura-como-código-terraform)
+- [Observabilidade e resposta a incidentes](#observabilidade-e-resposta-a-incidentes)
 - [Vulnerabilidades corrigidas](#vulnerabilidades-corrigidas)
 - [Decisões técnicas e trade-offs](#decisões-técnicas-e-trade-offs)
 - [Estrutura do repositório](#estrutura-do-repositório)
@@ -67,9 +68,14 @@ flowchart LR
   A -->|"DATABASE_URL<br/>db:5432 (SCRAM)"| DB
   A -->|"volume app_data<br/>/data/logs/taskflow.log<br/>JSON + request_id"| L[logs]
 
-  L -.->|leitura| P[Promtail]
-  P --> LK[Loki]
-  LK --> GF[Grafana<br/>consultas LogQL]
+  subgraph OBS["rede observabilidade (internal) · profile observabilidade"]
+    P[Promtail<br/>lê o volume :ro] --> LK[(Loki<br/>SEM porta no host)]
+    GF[Grafana<br/>dashboard + alerta]
+  end
+
+  L -.->|somente leitura| P
+  GF -->|LogQL| LK
+  ADM[Time de resposta] -->|"127.0.0.1:3000<br/>senha do .env"| GF
 ```
 
 - **Aplicação:** Flask servido pelo **gunicorn** (nunca pelo servidor de
@@ -82,10 +88,11 @@ flowchart LR
   Imagens fixadas por digest.
 - **Rede:** a única porta publicada é a 5000 da app, e só no `localhost` do
   host (`127.0.0.1:5000`).
-- **Observabilidade:** cada requisição gera um log JSON com `request_id`
-  (eventos `http_request`, `login_attempt`, `task_created`,
-  `tasks_list_accessed`), sem senha, token ou cookie. O Promtail lê os logs,
-  envia ao Loki e o Grafana consulta via LogQL.
+- **Observabilidade:** cada requisição gera um log JSON com `request_id` e
+  `ip` (eventos `http_request`, `login_attempt`, `task_created`,
+  `tasks_list_accessed`, `csrf_rejected`), sem senha, token ou cookie. O
+  Promtail lê os logs, envia ao Loki e o Grafana consulta via LogQL. Detalhes
+  em [Observabilidade e resposta a incidentes](#observabilidade-e-resposta-a-incidentes).
 
 ## A esteira (workflows)
 
@@ -263,6 +270,56 @@ a justificativa: replicação entre regiões fora do escopo (custo), notificaç�
 de evento sem consumidor, security group sem instância no lab e o bucket de
 logs que não pode registrar o acesso a si mesmo.
 
+## Observabilidade e resposta a incidentes
+
+```bash
+# .env com GRAFANA_ADMIN_PASSWORD (ver .env.example)
+docker compose --profile observabilidade up -d --build
+# Grafana: http://127.0.0.1:3000  (usuário admin, senha do .env)
+#   Dashboards → TaskFlow → "TaskFlow - Seguranca (logins e forca bruta)"
+#   Alerting → Alert rules → "Forca bruta no login (> 10 falhas/IP em 5 min)"
+```
+
+Datasource, dashboard e regra de alerta são **provisionados a partir do
+repositório** (`observabilidade/grafana/`) e não podem ser editados pela
+interface: mudança só por PR.
+
+**Logs:**
+- A app grava JSON em `/data/logs/taskflow.log` (volume `app_data`).
+- O Promtail monta esse volume **somente leitura** e transforma em label só
+  `level` e `event`, que têm poucos valores distintos.
+- `ip`, `username` e `request_id` são filtrados na consulta com `| json`.
+- Toda resposta HTTP traz o cabeçalho **`X-Request-ID`**, para achar no Loki
+  todos os eventos de uma requisição.
+
+**Consultas LogQL** (todas no dashboard):
+
+| # | Pergunta | LogQL |
+|---|---|---|
+| Q1 | **Quantas falhas de login por IP?** (detecção de força bruta: alerta e runbook) | `sum by (ip) (count_over_time({job="taskflow", event="login_attempt"} \| json \| result="failure" [5m]))` |
+| Q2 | Como está a saúde da app (respostas por status HTTP)? | `sum by (status_code) (count_over_time({job="taskflow", event="http_request"} \| json [1m]))` |
+| Q3 | O que aconteceu nesta requisição? | `{job="taskflow"} \| json \| request_id="<X-Request-ID>"` |
+| Q4 | Quais usuários estão sendo mais atacados? | `topk(5, sum by (username) (count_over_time({job="taskflow", event="login_attempt"} \| json \| result="failure" [15m])))` |
+| Q5 | O atacante conseguiu entrar? | `{job="taskflow", event="login_attempt"} \| json \| result="success" \| ip="<IP>"` |
+
+**Simulação de força bruta.** O atacante roda num container separado, com IP
+próprio, para não se confundir com o usuário legítimo:
+
+```bash
+docker run --rm --network taskflow_frontend -v "$PWD/scripts":/s:ro \
+  curlimages/curl:8.17.0 sh /s/brute_force.sh http://app:5000 admin 50 0.2
+```
+
+Resultado do exercício de 12/11/2026:
+- 50 tentativas em 15 s a partir de `172.22.0.4`, todas recusadas;
+- o alerta disparou só para o IP atacante, 9 s depois da última tentativa;
+- o usuário legítimo, com 2 erros de senha, ficou em *Normal*;
+- nenhuma senha apareceu no Loki.
+
+Evidências em [`docs/evidencias/observabilidade/`](docs/evidencias/observabilidade/)
+e tratamento completo nas 4 fases do NIST SP 800-61 no
+**[runbook de força bruta](docs/runbook-forca-bruta.md)**.
+
 ## Vulnerabilidades corrigidas
 
 Classificação pelo **OWASP Top 10:2025**, a edição atual. Ela substituiu a de
@@ -327,6 +384,18 @@ history`, ZAP e testes manuais de SQLi e XSS) estão em
   saída para `0.0.0.0/0`, e o Trivy acusa isso como CRITICAL (AWS-0104). Em vez
   de suprimir o alerta, a saída foi limitada a `var.cidr_saida` (proxy de
   saída ou VPC endpoints).
+- **Promtail, mesmo descontinuado.** O PDF pede Grafana + Loki + Promtail. A
+  Grafana encerrou o Promtail em 2026 em favor do Grafana Alloy, por isso foi
+  usada a **última versão publicada (3.6.11)**, fixada por digest, rodando
+  como não-root, somente leitura, sem capabilities e sem porta. Num projeto
+  real, o próximo passo seria migrar para o Alloy.
+- **Stack de observabilidade sem portas expostas.** Loki e Promtail ficam numa
+  rede `internal`, e a única entrada é o Grafana em `127.0.0.1:3000`, com a
+  senha do `.env`. Assim ninguém de fora lê nem injeta logs falsos no Loki.
+- **Alerta por IP, não global.** Um limite global de falhas confundiria um
+  usuário que erra a senha com um ataque. Agrupando por IP, o exercício
+  separou os dois. A limitação conhecida é o ataque distribuído (muitos IPs),
+  que está nas ações do pós-incidente do runbook.
 
 ## Estrutura do repositório
 
@@ -334,7 +403,7 @@ history`, ZAP e testes manuais de SQLi e XSS) estão em
 .
 ├── .github/
 │   ├── CODEOWNERS              # aprovação obrigatória de 1 code owner
-│   ├── dependabot.yml          # pip, docker, github-actions
+│   ├── dependabot.yml          # pip, docker, docker-compose, terraform, github-actions
 │   └── workflows/              # ci-basico, sast, sca, container, dast, iac-scan
 ├── .zap/rules.tsv              # regras do ZAP com justificativa
 ├── app.py                      # aplicação Flask corrigida + logging JSON
@@ -345,13 +414,18 @@ history`, ZAP e testes manuais de SQLi e XSS) estão em
 ├── gunicorn.conf.py            # servidor WSGI de produção
 ├── Dockerfile                  # imagem hardened (FALHAS 1 a 6 corrigidas)
 ├── .dockerignore
-├── docker-compose.yml          # app + PostgreSQL, seguro
+├── docker-compose.yml          # app + PostgreSQL (+ profile observabilidade)
 ├── .env.example                # modelo do .env (o .env real não é versionado)
 ├── infra/                      # Terraform: S3 privado/KMS/versionado/logging + SG
 │   ├── versions.tf  variables.tf  main.tf  outputs.tf
 │   └── .terraform.lock.hcl     # hashes do provider (conferidos no CI)
-├── scripts/docker-run-seguro.sh
-└── docs/evidencias/           # saídas antes × depois das ferramentas
+├── observabilidade/            # Loki, Promtail e Grafana (datasource, dashboard, alerta)
+├── scripts/
+│   ├── docker-run-seguro.sh    # docker run com as flags seguras
+│   └── brute_force.sh          # simulação de força bruta (só no lab)
+└── docs/
+    ├── runbook-forca-bruta.md  # NIST SP 800-61, exercitado com dados reais
+    └── evidencias/             # antes × depois + observabilidade
 ```
 
 > Nunca versione `.env`, `*.db` ou logs (já estão no `.gitignore`). Segredos
