@@ -39,7 +39,10 @@ Variaveis de ambiente:
   FLASK_RUN_HOST           interface de escuta do servidor de desenvolvimento
                            (padrao: 127.0.0.1); no container quem escuta e o
                            gunicorn (gunicorn.conf.py)
-  TASKFLOW_DATABASE        caminho do SQLite (padrao: taskflow.db)
+  DATABASE_URL             se definida, usa PostgreSQL (docker-compose.yml);
+                           ex.: postgresql://usuario:senha@db:5432/taskflow
+  TASKFLOW_DATABASE        caminho do SQLite quando nao ha DATABASE_URL
+                           (padrao: taskflow.db)
   TASKFLOW_LOG_DIR         diretorio dos logs (padrao: logs)
 
 Para rodar localmente:
@@ -171,16 +174,51 @@ app.config["SESSION_COOKIE_SECURE"] = (
     os.environ.get("TASKFLOW_SECURE_COOKIE", "false").lower() == "true"
 )
 
-# Caminho do SQLite configuravel pelo mesmo motivo dos logs: no container
-# o banco fica em /data (volume ou tmpfs), fora da raiz somente leitura.
+# Banco de dados (Modulo 5 - Docker Compose):
+#   - DATABASE_URL definida -> PostgreSQL (servico "db" do docker-compose.yml,
+#     isolado na rede "backend", sem porta publicada no host).
+#   - DATABASE_URL ausente  -> SQLite em arquivo (desenvolvimento local e o
+#     container do DAST no CI). O caminho e configuravel porque no container
+#     a raiz e somente leitura e o arquivo fica em /data.
+DATABASE_URL = os.environ.get("DATABASE_URL")
 DATABASE = os.environ.get("TASKFLOW_DATABASE", "taskflow.db")
+USANDO_POSTGRES = bool(DATABASE_URL)
+
+
+class _PostgresDB:
+    """Adaptador minimo para o psycopg ter a mesma interface usada pelo
+    app com o sqlite3: db.execute(sql, params) -> cursor e db.commit().
+
+    As queries do app usam o placeholder "?" do sqlite3; aqui ele vira o
+    "%s" do psycopg. Os valores continuam indo SEMPRE como parametros
+    separados da string SQL (consulta parametrizada), nunca concatenados:
+    a protecao contra SQL Injection e a mesma nos dois bancos.
+    """
+
+    def __init__(self, url):
+        import psycopg
+        from psycopg.rows import dict_row
+
+        self._conn = psycopg.connect(url, row_factory=dict_row)
+
+    def execute(self, sql, params=()):
+        return self._conn.execute(sql.replace("?", "%s"), params)
+
+    def commit(self):
+        self._conn.commit()
+
+    def close(self):
+        self._conn.close()
 
 
 def get_db():
     db = getattr(g, "_database", None)
     if db is None:
-        db = g._database = sqlite3.connect(DATABASE)
-        db.row_factory = sqlite3.Row
+        if USANDO_POSTGRES:
+            db = g._database = _PostgresDB(DATABASE_URL)
+        else:
+            db = g._database = sqlite3.connect(DATABASE)
+            db.row_factory = sqlite3.Row
     return db
 
 
@@ -191,26 +229,50 @@ def close_connection(exception):
         db.close()
 
 
+# Esquema das tabelas. So muda o tipo da chave primaria autoincremental
+# (SERIAL no PostgreSQL, INTEGER AUTOINCREMENT no SQLite).
+_ESQUEMA_SQLITE = """
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS tasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        done INTEGER DEFAULT 0,
+        FOREIGN KEY (user_id) REFERENCES users (id)
+    );
+"""
+_ESQUEMA_POSTGRES = (
+    """
+    CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS tasks (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users (id),
+        title TEXT NOT NULL,
+        description TEXT,
+        done INTEGER DEFAULT 0
+    )
+    """,
+)
+
+
 def init_db():
     db = get_db()
-    db.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS tasks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            title TEXT NOT NULL,
-            description TEXT,
-            done INTEGER DEFAULT 0,
-            FOREIGN KEY (user_id) REFERENCES users (id)
-        );
-        """
-    )
+    if USANDO_POSTGRES:
+        for comando in _ESQUEMA_POSTGRES:
+            db.execute(comando)
+    else:
+        db.executescript(_ESQUEMA_SQLITE)
     db.commit()
 
     # Usuarios iniciais: as senhas vem de variaveis de ambiente (nunca do
@@ -227,8 +289,11 @@ def init_db():
                 extra={"event": "seed_user_skipped", "username": username},
             )
             continue
+        # "Insere se nao existir": sintaxe padrao SQL (ON CONFLICT), aceita
+        # tanto pelo PostgreSQL quanto pelo SQLite 3.24+.
         db.execute(
-            "INSERT OR IGNORE INTO users (username, password) VALUES (?, ?)",
+            "INSERT INTO users (username, password) VALUES (?, ?) "
+            "ON CONFLICT (username) DO NOTHING",
             (username, generate_password_hash(senha)),
         )
     db.commit()
@@ -423,8 +488,10 @@ def tasks():
     if search:
         # Consulta parametrizada: o termo de busca vai como parametro, nunca
         # concatenado na string SQL (evita SQL Injection pelo parametro "q").
+        # LOWER(...) nos dois lados: busca sem diferenciar maiusculas, igual
+        # nos dois bancos (o LIKE do PostgreSQL diferencia, o do SQLite nao).
         rows = db.execute(
-            "SELECT * FROM tasks WHERE user_id = ? AND title LIKE ?",
+            "SELECT * FROM tasks WHERE user_id = ? AND LOWER(title) LIKE LOWER(?)",
             (session["user_id"], f"%{search}%"),
         ).fetchall()
     else:

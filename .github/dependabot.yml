@@ -63,3 +63,22 @@ updates:
     labels:
       - "dependencies"
       - "docker"
+
+  # Provider do Terraform (hashicorp/aws) do infra/. O Dependabot atualiza a
+  # restricao de versao e o .terraform.lock.hcl juntos.
+  - package-ecosystem: "terraform"
+    directory: "/infra"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "iac"
+
+  # Imagens do docker-compose.yml (postgres fixado por digest).
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "docker"

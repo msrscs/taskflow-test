@@ -23,6 +23,8 @@ protegida por uma esteira de CI segura no GitHub Actions. Cada ferramenta é um
 - [Proteção da branch main](#proteção-da-branch-main)
 - [Como executar localmente](#como-executar-localmente)
 - [Como executar com Docker (hardened)](#como-executar-com-docker-hardened)
+- [Como executar com Docker Compose (app + PostgreSQL)](#como-executar-com-docker-compose-app--postgresql)
+- [Infraestrutura como código (Terraform)](#infraestrutura-como-código-terraform)
 - [Vulnerabilidades corrigidas](#vulnerabilidades-corrigidas)
 - [Decisões técnicas e trade-offs](#decisões-técnicas-e-trade-offs)
 - [Estrutura do repositório](#estrutura-do-repositório)
@@ -37,7 +39,7 @@ flowchart LR
   B --> C[Commit / PR<br/>Gitleaks · Semgrep]
   C --> D[Build<br/>pip-audit · Dependabot<br/>Trivy image]
   D --> E[Testar em execução<br/>OWASP ZAP Baseline]
-  E --> F[Provisionar<br/>Checkov · Trivy config]
+  E --> F[Provisionar<br/>Checkov · Trivy config<br/>terraform validate]
   F --> G[Operar<br/>container hardened<br/>Lynis]
   G --> H[Monitorar<br/>logs JSON → Promtail<br/>→ Loki → Grafana]
   H --> I[Responder<br/>runbook NIST SP 800-61]
@@ -46,15 +48,24 @@ flowchart LR
 
 ## Arquitetura
 
+Ambiente do `docker-compose.yml`:
+
 ```mermaid
 flowchart LR
-  U[Usuário / navegador] -->|"HTTP 127.0.0.1:5000"| G
+  U[Usuário / navegador] -->|"HTTP 127.0.0.1:5000<br/>(única porta publicada)"| G
 
-  subgraph C["Container taskflow (raiz somente leitura, UID 10001)"]
-    G[gunicorn<br/>2 workers] --> A[app.py<br/>Flask + Jinja2]
-    A -->|"/data/taskflow.db"| DB[(SQLite<br/>tmpfs / volume)]
-    A -->|"/data/logs/taskflow.log<br/>JSON + request_id"| L[logs]
+  subgraph FE["rede frontend"]
+    subgraph APP["serviço app (read-only, UID 10001, cap_drop ALL)"]
+      G[gunicorn<br/>2 workers] --> A[app.py<br/>Flask + Jinja2]
+    end
   end
+
+  subgraph BE["rede backend (internal: sem saída para a internet)"]
+    DB[(serviço db<br/>PostgreSQL 17<br/>read-only, UID 70<br/>SEM porta no host)]
+  end
+
+  A -->|"DATABASE_URL<br/>db:5432 (SCRAM)"| DB
+  A -->|"volume app_data<br/>/data/logs/taskflow.log<br/>JSON + request_id"| L[logs]
 
   L -.->|leitura| P[Promtail]
   P --> LK[Loki]
@@ -63,11 +74,14 @@ flowchart LR
 
 - **Aplicação:** Flask servido pelo **gunicorn** (nunca pelo servidor de
   desenvolvimento). HTML apenas via templates Jinja2 com autoescape.
-- **Container:** imagem `python:3.12-slim` fixada por digest, usuário não-root,
-  raiz somente leitura. Os únicos diretórios graváveis são `/data` (banco e
-  logs) e `/tmp`, montados como `tmpfs` ou volume.
-- **Rede:** a porta 5000 é publicada só no `localhost` do host
-  (`-p 127.0.0.1:5000:5000`).
+- **Banco:** **PostgreSQL** no Compose, isolado na rede `backend` (marcada
+  `internal`) e sem porta publicada no host. Sem `DATABASE_URL`, o app usa
+  **SQLite**: é assim no desenvolvimento local e no container do DAST no CI.
+- **Containers:** app e banco com raiz somente leitura, usuário não-root,
+  `cap_drop: ALL`, `no-new-privileges` e limites de CPU, memória e processos.
+  Imagens fixadas por digest.
+- **Rede:** a única porta publicada é a 5000 da app, e só no `localhost` do
+  host (`127.0.0.1:5000`).
 - **Observabilidade:** cada requisição gera um log JSON com `request_id`
   (eventos `http_request`, `login_attempt`, `task_created`,
   `tasks_list_accessed`), sem senha, token ou cookie. O Promtail lê os logs,
@@ -90,9 +104,11 @@ não. O Dependabot atualiza SHA e comentário juntos.
 | `dast.yml` | `zap-baseline` | Builda a imagem, sobe a app **no próprio runner** com as flags seguras, espera o `/login` responder e roda o ZAP Baseline | Alerta não justificado em `.zap/rules.tsv` |
 | `iac-scan.yml` | `checkov` | Checkov em Terraform, Dockerfile e nos próprios workflows | Qualquer falha |
 | `iac-scan.yml` | `trivy-config` | Trivy config (sucessor do tfsec) | Má configuração HIGH/CRITICAL |
+| `iac-scan.yml` | `terraform-validate` | `terraform init` (provider conferido pelo `.terraform.lock.hcl`), `fmt -check` e `validate` no `infra/` | Terraform inválido ou fora do padrão |
 
 Além dos workflows, o **Dependabot** (`.github/dependabot.yml`) abre PRs
-semanais para `pip`, `docker` (imagem base) e `github-actions`.
+semanais para `pip`, `docker` (imagem base), `docker-compose` (Postgres),
+`terraform` (provider AWS) e `github-actions`.
 
 ## Como disparar cada workflow
 
@@ -122,7 +138,7 @@ O relatório do ZAP fica como artefato da execução (`zap-baseline-report`).
 
 - **Pull Request obrigatório.** Ninguém faz push direto na `main`, nem
   administradores.
-- **Required status checks:** os 8 jobs da tabela acima, com a branch
+- **Required status checks:** os 9 jobs da tabela acima, com a branch
   atualizada em relação à `main`.
 - **CODEOWNERS** (`.github/CODEOWNERS`): todo PR precisa da aprovação de pelo
   menos 1 code owner. Aprovações antigas caem quando entra commit novo.
@@ -157,7 +173,8 @@ definida não é criado. Sem `TASKFLOW_SECRET_KEY`, a aplicação não sobe.
 | `TASKFLOW_ADMIN_PASSWORD` / `TASKFLOW_ALUNO_PASSWORD` | Senhas iniciais | usuário não criado |
 | `FLASK_DEBUG` | Debug do Flask, **só em desenvolvimento** | `false` |
 | `FLASK_RUN_HOST` | Interface do servidor de desenvolvimento | `127.0.0.1` |
-| `TASKFLOW_DATABASE` | Caminho do SQLite | `taskflow.db` |
+| `DATABASE_URL` | Se definida, usa PostgreSQL (o Compose define) | SQLite |
+| `TASKFLOW_DATABASE` | Caminho do SQLite (sem `DATABASE_URL`) | `taskflow.db` |
 | `TASKFLOW_LOG_DIR` | Diretório dos logs JSON | `logs` |
 | `TASKFLOW_SECURE_COOKIE` | Cookie só via HTTPS | `false` |
 
@@ -189,6 +206,62 @@ seguras:
 
 No fim, o script imprime as evidências: flags aplicadas, `uid=10001` e uma
 tentativa de escrita recusada com `Read-only file system`.
+
+## Como executar com Docker Compose (app + PostgreSQL)
+
+```bash
+cp .env.example .env
+# valores aleatórios (hex, para não quebrar a DATABASE_URL)
+sed -i "s/^TASKFLOW_SECRET_KEY=.*/TASKFLOW_SECRET_KEY=$(openssl rand -hex 32)/" .env
+sed -i "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$(openssl rand -hex 24)/" .env
+sed -i "s/^TASKFLOW_ADMIN_PASSWORD=.*/TASKFLOW_ADMIN_PASSWORD=$(openssl rand -hex 12)/" .env
+git check-ignore -v .env            # o .env real nunca é versionado
+
+docker compose up -d --build
+docker compose ps                   # app e db "healthy"; db sem porta publicada
+```
+
+| Requisito (PDF) | Onde está no `docker-compose.yml` |
+|---|---|
+| Redes frontend/backend isoladas | `networks`: a `backend` é `internal: true` e só app e db estão nela |
+| Banco sem porta exposta ao host | serviço `db` **sem** `ports:` |
+| Segredos via `.env` + `.env.example` | `${VAR:?mensagem}`: o Compose aborta se faltar uma variável |
+| `read_only` | nos dois serviços (graváveis só volumes e `tmpfs`) |
+| `healthcheck` | app (`/login`) e db (`pg_isready`); a app só sobe com o banco saudável |
+| Limites de CPU e memória | `deploy.resources.limits` (e `pids`) |
+| `no-new-privileges` | `security_opt` nos dois, junto com `cap_drop: ALL` |
+
+Validado localmente:
+- app e db ficam `healthy`;
+- a porta 5432 fica fechada no host e o banco não tem saída para a internet;
+- os dados persistem depois de `down`/`up`;
+- a senha fica gravada como hash scrypt no Postgres;
+- `admin' --` é recusado.
+
+## Infraestrutura como código (Terraform)
+
+`infra/` é a versão corrigida do `main.insecure.tf` do Módulo 5. Ela serve só
+para validação: não há `terraform apply` no lab.
+
+| Exigência | Implementação |
+|---|---|
+| Bucket privado | `public_access_block` com os 4 bloqueios `true` + ACLs desligadas (`BucketOwnerEnforced`) + política que nega acesso sem HTTPS |
+| Criptografado | SSE-KMS com chave própria, rotação anual e bucket key |
+| Versionado | `aws_s3_bucket_versioning` = `Enabled`, com expiração de versões antigas |
+| Com logging | `aws_s3_bucket_logging` para um bucket de logs dedicado (também privado, criptografado e versionado, com retenção de 1 ano) |
+| Security group restrito a uma variável de IP | Entrada (443 e 22) só de `var.ip_permitido`; saída só HTTPS para `var.cidr_saida`. As **duas variáveis recusam `0.0.0.0/0`** na validação |
+
+```bash
+cd infra
+terraform init -backend=false && terraform fmt -check && terraform validate
+checkov -d . --framework terraform     # 55 passed, 0 failed, 6 skips justificados
+trivy config .                          # 0 achados
+```
+
+Os `#checkov:skip` e o `#trivy:ignore` ficam no próprio recurso, cada um com
+a justificativa: replicação entre regiões fora do escopo (custo), notificações
+de evento sem consumidor, security group sem instância no lab e o bucket de
+logs que não pode registrar o acesso a si mesmo.
 
 ## Vulnerabilidades corrigidas
 
@@ -240,8 +313,20 @@ history`, ZAP e testes manuais de SQLi e XSS) estão em
 - **Gitleaks sem allowlist.** A linha de base foi commitada já sem os
   segredos didáticos, então o histórico não tem nada a suprimir. Nenhuma regra
   foi desligada.
-- **SQLite em vez de Postgres.** Mantém a aplicação simples. No container, o
-  banco fica em `/data` (tmpfs ou volume) para conviver com `--read-only`.
+- **PostgreSQL no Compose, SQLite no dev e no DAST.** O PDF pede um banco
+  isolado, sem porta no host, e isso só faz sentido com um serviço de banco
+  separado. Por isso o Compose usa Postgres. O `app.py` escolhe o banco pela
+  `DATABASE_URL` com um adaptador mínimo, e as consultas continuam
+  parametrizadas nos dois casos. O dev local e o DAST do CI seguem com SQLite,
+  porque sobem a app sozinha no runner, sem depender de um banco externo.
+- **Postgres sem root.** O serviço `db` roda direto como o usuário `postgres`
+  (UID 70), com raiz somente leitura e `cap_drop: ALL`. A imagem oficial
+  normalmente começa como root para fazer `chown`; rodando como o próprio
+  usuário, ela não precisa de nenhuma capability.
+- **Saída do security group restrita.** O modelo do curso liberava HTTPS de
+  saída para `0.0.0.0/0`, e o Trivy acusa isso como CRITICAL (AWS-0104). Em vez
+  de suprimir o alerta, a saída foi limitada a `var.cidr_saida` (proxy de
+  saída ou VPC endpoints).
 
 ## Estrutura do repositório
 
@@ -260,6 +345,11 @@ history`, ZAP e testes manuais de SQLi e XSS) estão em
 ├── gunicorn.conf.py            # servidor WSGI de produção
 ├── Dockerfile                  # imagem hardened (FALHAS 1 a 6 corrigidas)
 ├── .dockerignore
+├── docker-compose.yml          # app + PostgreSQL, seguro
+├── .env.example                # modelo do .env (o .env real não é versionado)
+├── infra/                      # Terraform: S3 privado/KMS/versionado/logging + SG
+│   ├── versions.tf  variables.tf  main.tf  outputs.tf
+│   └── .terraform.lock.hcl     # hashes do provider (conferidos no CI)
 ├── scripts/docker-run-seguro.sh
 └── docs/evidencias/           # saídas antes × depois das ferramentas
 ```

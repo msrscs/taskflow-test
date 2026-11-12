@@ -20,5 +20,9 @@ PyYAML==6.0.2
 requests==2.33.0
 markupsafe==3.0.4
 itsdangerous==2.2.0
+# Driver do PostgreSQL (psycopg 3), usado quando DATABASE_URL esta definida
+# (docker-compose.yml). O extra [binary] traz a libpq embutida na wheel, sem
+# precisar de compilador nem pacotes do SO na imagem.
+psycopg[binary]==3.3.9
 # Servidor WSGI de producao usado no Dockerfile (correcao das FALHAS 5 e 6).
 gunicorn==27.0.0
