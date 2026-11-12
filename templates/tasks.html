@@ -36,7 +36,7 @@ qualquer chave dupla dentro de comentarios HTML.
         {% for task in tasks %}
         <li>
             {# title e description passam pelo autoescape do Jinja2. #}
-            <b>{{ task['title'] | safe }}</b> - {{ task['description'] }}
+            <b>{{ task['title'] }}</b> - {{ task['description'] }}
             {% if task['done'] %}(feita){% endif %}
         </li>
         {% else %}
