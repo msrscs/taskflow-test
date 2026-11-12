@@ -9,10 +9,21 @@
 
 A TaskFlow é um gerenciador de tarefas (to-do list) em Python/Flask, usado na
 disciplina de DevSecOps. Partindo da versão **propositalmente vulnerável**
-(`app-exemplo/`), este repositório entrega a aplicação **corrigida** e
+(o `app-exemplo/` do material da disciplina, que não está versionado aqui;
+as saídas das ferramentas contra ele estão em
+[`docs/evidencias/antes/`](docs/evidencias/antes/)), este repositório entrega a aplicação **corrigida** e
 protegida por uma esteira de CI segura no GitHub Actions. Cada ferramenta é um
 **gate**: se ela encontra um problema, o check fica vermelho e o merge na
 `main` é bloqueado.
+
+## Identificação
+
+| | |
+|---|---|
+| **Instituição** | Cesar School |
+| **Disciplina** | DevSecOps |
+| **Professores** | Cris Apolinário<br>Diego Buarque de Amorim Batista |
+| **Equipe** | Artur Torres Lima Cavalcanti<br>Eduardo Henrique Ferreira Fonseca Barbosa<br>Gabriel de Medeiros Almeida<br>Mauro Sérgio Rezende da Silva<br>Silvio Barros Tenório |
 
 ## Sumário
 
