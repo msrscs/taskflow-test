@@ -192,17 +192,22 @@ tentativa de escrita recusada com `Read-only file system`.
 
 ## Vulnerabilidades corrigidas
 
-| Vulnerabilidade (versão original) | Correção | OWASP Top 10 2021 |
+Classificação pelo **OWASP Top 10:2025**, a edição atual. Ela substituiu a de
+2021, renumerou as categorias e criou A03 Software Supply Chain Failures e
+A10 Mishandling of Exceptional Conditions.
+
+| Vulnerabilidade (versão original) | Correção | OWASP Top 10:2025 |
 |---|---|---|
-| SQL Injection no login e na busca `q` | Consultas parametrizadas | A03 Injection |
-| XSS armazenado e refletido (incluindo `q` e a mensagem de erro do login) | Templates Jinja2 com autoescape, sem `\| safe` | A03 Injection |
-| `SECRET_KEY` hardcoded | Variável `TASKFLOW_SECRET_KEY`, sem fallback | A02 Cryptographic Failures |
-| Senhas em texto puro | Hash (Werkzeug/scrypt), senhas iniciais vindas do ambiente | A02 / A07 |
-| `/debug/info` expondo o ambiente e a chave | Rota removida | A05 Security Misconfiguration |
-| `debug=True` fixo | `FLASK_DEBUG`, desligado por padrão | A05 |
-| Sem headers de segurança e sem CSRF | CSP sem `unsafe-inline`, `X-Frame-Options`, `nosniff`, `Referrer-Policy`, cookie `HttpOnly` + `SameSite`, token CSRF em todo POST | A05 / A01 |
-| Dependências com CVEs | Versões atualizadas, travadas com hash | A06 Vulnerable Components |
-| Dockerfile inseguro (FALHAS 1 a 6) | Ver `Dockerfile`: digest fixo, não-root, `--require-hashes`, sem segredos, gunicorn, debug desligado | A05 / A08 |
+| SQL Injection no login e na busca `q` | Consultas parametrizadas | A05 Injection |
+| XSS armazenado e refletido (incluindo `q` e a mensagem de erro do login) | Templates Jinja2 com autoescape, sem `\| safe` | A05 Injection |
+| `SECRET_KEY` hardcoded | Variável `TASKFLOW_SECRET_KEY`, sem fallback | A04 Cryptographic Failures |
+| Senhas em texto puro | Hash (Werkzeug/scrypt), senhas iniciais vindas do ambiente | A04 Cryptographic Failures / A07 Authentication Failures |
+| `/debug/info` expondo o ambiente e a chave | Rota removida | A02 Security Misconfiguration |
+| `debug=True` fixo (debugger interativo e stack traces na resposta) | `FLASK_DEBUG`, desligado por padrão | A02 Security Misconfiguration / A10 Mishandling of Exceptional Conditions |
+| Sem headers de segurança e sem CSRF | CSP sem `unsafe-inline`, `X-Frame-Options`, `nosniff`, `Referrer-Policy`, cookie `HttpOnly` + `SameSite`, token CSRF em todo POST | A02 Security Misconfiguration / A01 Broken Access Control (CSRF) |
+| Dependências com CVEs | Versões atualizadas, `pip-audit` e Dependabot na esteira | A03 Software Supply Chain Failures |
+| Dependências e imagem base sem verificação de integridade | `--require-hashes`, imagem base fixada por digest, actions pinadas por SHA | A08 Software or Data Integrity Failures / A03 Software Supply Chain Failures |
+| Dockerfile inseguro (root, servidor de desenvolvimento, debug) | Usuário não-root, gunicorn, debug desligado, raiz somente leitura | A02 Security Misconfiguration |
 
 ## Decisões técnicas e trade-offs
 
