@@ -1,87 +1,69 @@
-# =============================================================================
-# Workflow de exemplo: Scanning de IaC (Checkov + tfsec) para Terraform
+# Scanning de IaC (Checkov + Trivy config) - Modulo 5.
 #
-# COMO USAR:
-#   Copie este arquivo para ".github/workflows/iac-scan.yml" na raiz do seu
-#   repositorio (o GitHub so reconhece workflows dentro dessa pasta exata).
-#   Fica em "codigo/.github-workflows-exemplo/" neste repositorio educacional
-#   para nao ser executado como um workflow ativo por engano - mesmo padrao
-#   usado nos Modulos 1, 3 e 4 desta disciplina.
+# Padronizacao aplicada:
+#   - REMOVIDO o filtro "paths: **/*.tf". Com ele, o workflow so rodava
+#     quando um .tf mudava; marcado como required check, PRs que nao mexem
+#     em infraestrutura ficariam travados esperando um check que nunca roda
+#     (armadilha citada no PDF). Agora roda em todo PR: o scan leva poucos
+#     segundos e garante que o check sempre exista.
+#   - Checkov olha Terraform, Dockerfile e os proprios workflows
+#     (github_actions), nao so Terraform: o Dockerfile tambem e IaC.
+#   - Actions pinadas por SHA (antes @master, que executa qualquer commit
+#     novo do repositorio da action) e versao do Trivy fixa.
+#   - permissions: contents: read no topo; ubuntu-24.04 nos dois jobs.
+#   - Nomes de job curtos e estaveis (checkov / trivy-config), que serao os
+#     required checks na protecao da main.
 #
-# O QUE ELE FAZ:
-#   1. Dispara em todo push/PR que toque em arquivos ".tf" (evita rodar o
-#      scan de IaC sem necessidade em mudancas que nao mexem em
-#      infraestrutura).
-#   2. Roda o Checkov contra os arquivos Terraform do repositorio.
-#   3. Roda o tfsec (via Trivy, que hoje incorpora as regras do tfsec)
-#      contra os mesmos arquivos.
-#   4. Falha o job se qualquer uma das ferramentas encontrar um problema de
-#      severidade relevante, bloqueando o merge do PR se o repositorio
-#      tiver "branch protection" configurada para exigir o check verde -
-#      exatamente o mesmo principio de shift-left aplicado a SAST/SCA/DAST
-#      nos modulos anteriores, agora para infraestrutura.
-# =============================================================================
+# Todo "#checkov:skip=CKV_...:<motivo>" deve ficar no proprio recurso, com
+# a justificativa escrita (exigencia do PDF).
 
 name: IaC Security Scan
 
 on:
-  push:
-    branches: ["**"]
-    paths:
-      - "**/*.tf"
-      - ".github/workflows/iac-scan.yml"
   pull_request:
-    branches: ["**"]
-    paths:
-      - "**/*.tf"
+  push:
+    branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   checkov:
-    name: IaC Scan - Checkov
-    runs-on: ubuntu-latest
+    name: checkov
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Checkout do codigo
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Rodar Checkov
-        uses: bridgecrewio/checkov-action@master
+        uses: bridgecrewio/checkov-action@a32f8b5c5c7c958bc38947c65dfe139debaf0607 # v12.3140.0
         with:
-          # Diretorio raiz onde o Checkov deve procurar arquivos .tf,
-          # CloudFormation, Dockerfile, Kubernetes manifests, etc.
           directory: .
-          framework: terraform
-          # "soft_fail: false" (padrao) faz a action retornar exit code
-          # != 0 quando ha achados, marcando o job como "failed" - e o
-          # comportamento desejado para um gate de seguranca em CI.
+          framework: terraform,dockerfile,github_actions
+          # soft_fail: false -> exit code != 0 com achados (gate).
           soft_fail: false
           output_format: cli
+          # Mostra so as checagens que falharam (log mais legivel).
+          quiet: true
 
-  tfsec:
-    name: IaC Scan - tfsec (via Trivy)
-    runs-on: ubuntu-latest
+  trivy-config:
+    name: trivy-config
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Checkout do codigo
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # O tfsec foi incorporado ao Trivy (Aqua Security) como o subcomando
-      # "trivy config". A action oficial do Trivy cobre esse caso de uso e
-      # e mantida ativamente, por isso e a opcao recomendada atualmente.
-      - name: Rodar Trivy (config/IaC scan - regras equivalentes ao tfsec)
-        uses: aquasecurity/trivy-action@master
+      # O tfsec foi incorporado ao Trivy como "trivy config".
+      - name: Rodar Trivy config (Terraform, Dockerfile, Compose)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: config
           scan-ref: .
-          # Falha o job (exit-code 1) apenas para severidades relevantes,
-          # seguindo o mesmo padrao de gate usado no Modulo 2 (Trivy para
-          # imagens de container) e no Modulo 3 (SCA).
+          # Versao do binario do Trivy fixada (e o padrao desta action).
+          version: v0.70.0
+          # Gate so para severidades relevantes.
           severity: HIGH,CRITICAL
           exit-code: "1"
-
-# =============================================================================
-# Observacao para o professor/aluno: as duas actions acima sao
-# independentes e redundantes de proposito neste exemplo didatico, para
-# que a turma compare os achados de Checkov e tfsec/Trivy lado a lado (ver
-# Encontro 12). Em um pipeline real, e comum optar por apenas uma das duas
-# ferramentas, ou manter ambas como camadas complementares de defesa.
-# =============================================================================

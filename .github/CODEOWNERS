@@ -1,0 +1,11 @@
+# CODEOWNERS - quem precisa aprovar cada parte do repositorio.
+#
+# Com "Require review from Code Owners" ativo na protecao da main, todo PR
+# precisa da aprovacao de pelo menos 1 dos donos listados para o caminho
+# alterado. Cada usuario listado precisa ter permissao de escrita (Write)
+# no repositorio; caso contrario o GitHub ignora a linha.
+#
+# A ultima regra que casar com o arquivo e a que vale; aqui ha uma so,
+# cobrindo o repositorio inteiro (workflows, Dockerfile, app, infra...).
+
+*       @msrscs @ehffb @gma102 @silbiotenorio-cesarschool @maurosrs

@@ -2,7 +2,7 @@
 # Configuração de exemplo do GitHub Dependabot.
 #
 # COMO USAR:
-#   Copie este arquivo para ".github/dependabot.yml" na raiz do repositório
+#   Fica em ".github/dependabot.yml" na raiz do repositório
 #   (assim como os workflows, o Dependabot só é reconhecido nesse caminho
 #   exato). Depois disso, o próprio GitHub passa a escanear as dependências
 #   automaticamente - não é preciso configurar nenhum job de CI para isso.
@@ -53,3 +53,13 @@ updates:
     labels:
       - "dependencies"
       - "ci"
+
+  # Ecossistema Docker - atualiza a imagem base do Dockerfile da raiz
+  # (python:3.12-slim), que tambem recebe correcoes de seguranca.
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "docker"

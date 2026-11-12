@@ -36,7 +36,11 @@ Variaveis de ambiente:
   TASKFLOW_ADMIN_PASSWORD  senha inicial do usuario "admin" (opcional)
   TASKFLOW_ALUNO_PASSWORD  senha inicial do usuario "aluno" (opcional)
   FLASK_DEBUG              "true" so em desenvolvimento (padrao: false)
-  FLASK_RUN_HOST           interface de escuta (padrao: 127.0.0.1)
+  FLASK_RUN_HOST           interface de escuta do servidor de desenvolvimento
+                           (padrao: 127.0.0.1); no container quem escuta e o
+                           gunicorn (gunicorn.conf.py)
+  TASKFLOW_DATABASE        caminho do SQLite (padrao: taskflow.db)
+  TASKFLOW_LOG_DIR         diretorio dos logs (padrao: logs)
 
 Para rodar localmente:
     pip install -r requirements.txt
@@ -68,6 +72,7 @@ from flask import (
 )
 from werkzeug.security import check_password_hash, generate_password_hash
 
+
 # ---------------------------------------------------------------------------
 # 1. Formatter JSON customizado
 # ---------------------------------------------------------------------------
@@ -86,9 +91,7 @@ class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         # Campos padronizados que TODO log da aplicacao vai ter.
         log_entry = {
-            "timestamp": datetime.fromtimestamp(
-                record.created, tz=timezone.utc
-            ).isoformat(),
+            "timestamp": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
@@ -98,9 +101,7 @@ class JsonFormatter(logging.Formatter):
         # sao passados via `extra={...}` nas chamadas de log e ficam
         # disponiveis como atributos do record. Copiamos apenas os que
         # nao fazem parte do LogRecord padrao, para nao duplicar dados.
-        campos_padrao_do_record = logging.LogRecord(
-            "", 0, "", 0, "", None, None
-        ).__dict__.keys()
+        campos_padrao_do_record = logging.LogRecord("", 0, "", 0, "", None, None).__dict__.keys()
         for chave, valor in record.__dict__.items():
             if chave not in campos_padrao_do_record and chave not in log_entry:
                 log_entry[chave] = valor
@@ -119,7 +120,11 @@ def configurar_logging() -> logging.Logger:
       - StreamHandler (stdout) -> util para `docker compose logs -f`
       - RotatingFileHandler (logs/taskflow.log) -> lido pelo Promtail
     """
-    os.makedirs("logs", exist_ok=True)
+    # Diretorio dos logs configuravel: no container a raiz do sistema de
+    # arquivos e somente leitura (--read-only), entao os logs vao para um
+    # diretorio gravavel (volume/tmpfs) definido no Dockerfile.
+    log_dir = os.environ.get("TASKFLOW_LOG_DIR", "logs")
+    os.makedirs(log_dir, exist_ok=True)
 
     logger = logging.getLogger("taskflow")
     logger.setLevel(logging.INFO)
@@ -133,7 +138,7 @@ def configurar_logging() -> logging.Logger:
     # RotatingFileHandler evita que o arquivo de log cresca sem limite
     # durante a aula (5 MB por arquivo, mantendo 3 arquivos antigos).
     file_handler = RotatingFileHandler(
-        "logs/taskflow.log", maxBytes=5 * 1024 * 1024, backupCount=3
+        os.path.join(log_dir, "taskflow.log"), maxBytes=5 * 1024 * 1024, backupCount=3
     )
     file_handler.setFormatter(formatter)
 
@@ -153,7 +158,7 @@ _secret_key = os.environ.get("TASKFLOW_SECRET_KEY")
 if not _secret_key:
     raise RuntimeError(
         "Variavel de ambiente TASKFLOW_SECRET_KEY nao definida. "
-        "Ex: export TASKFLOW_SECRET_KEY=\"$(openssl rand -hex 32)\""
+        'Ex: export TASKFLOW_SECRET_KEY="$(openssl rand -hex 32)"'
     )
 app.config["SECRET_KEY"] = _secret_key
 
@@ -166,7 +171,9 @@ app.config["SESSION_COOKIE_SECURE"] = (
     os.environ.get("TASKFLOW_SECURE_COOKIE", "false").lower() == "true"
 )
 
-DATABASE = "taskflow.db"
+# Caminho do SQLite configuravel pelo mesmo motivo dos logs: no container
+# o banco fica em /data (volume ou tmpfs), fora da raiz somente leitura.
+DATABASE = os.environ.get("TASKFLOW_DATABASE", "taskflow.db")
 
 
 def get_db():
@@ -421,9 +428,7 @@ def tasks():
             (session["user_id"], f"%{search}%"),
         ).fetchall()
     else:
-        rows = db.execute(
-            "SELECT * FROM tasks WHERE user_id = ?", (session["user_id"],)
-        ).fetchall()
+        rows = db.execute("SELECT * FROM tasks WHERE user_id = ?", (session["user_id"],)).fetchall()
 
     # Acesso a lista de tarefas (recurso "sensivel" do ponto de vista de
     # cada usuario, pois pertence a ele). Logar esse acesso permite,
