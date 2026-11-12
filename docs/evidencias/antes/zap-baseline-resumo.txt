@@ -1,0 +1,10 @@
+IGNORE: Non-Storable Content [10049] x 6 
+IGNORE: Authentication Request Identified [10111] x 1 
+IGNORE: Sec-Fetch-Dest Header is Missing [90005] x 16 
+WARN-NEW: Missing Anti-clickjacking Header [10020] x 3 
+WARN-NEW: X-Content-Type-Options Header Missing [10021] x 3 
+WARN-NEW: Server Leaks Version Information via "Server" HTTP Response Header Field [10036] x 5 
+WARN-NEW: Content Security Policy (CSP) Header Not Set [10038] x 3 
+WARN-NEW: Permissions Policy Header Not Set [10063] x 5 
+WARN-NEW: Cross-Origin-Embedder-Policy Header Missing or Invalid [90004] x 9 
+FAIL-NEW: 0	FAIL-INPROG: 0	WARN-NEW: 6	WARN-INPROG: 0	INFO: 0	IGNORE: 3	PASS: 62

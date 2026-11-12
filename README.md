@@ -209,6 +209,10 @@ A10 Mishandling of Exceptional Conditions.
 | Dependências e imagem base sem verificação de integridade | `--require-hashes`, imagem base fixada por digest, actions pinadas por SHA | A08 Software or Data Integrity Failures / A03 Software Supply Chain Failures |
 | Dockerfile inseguro (root, servidor de desenvolvimento, debug) | Usuário não-root, gunicorn, debug desligado, raiz somente leitura | A02 Security Misconfiguration |
 
+Evidências reais do antes × depois (Semgrep, pip-audit, Trivy, `docker
+history`, ZAP e testes manuais de SQLi e XSS) estão em
+[`docs/evidencias/`](docs/evidencias/README.md).
+
 ## Decisões técnicas e trade-offs
 
 - **`iac-scan.yml` sem filtro `paths:`.** Com o filtro, o scan só rodaria
@@ -256,7 +260,8 @@ A10 Mishandling of Exceptional Conditions.
 ├── gunicorn.conf.py            # servidor WSGI de produção
 ├── Dockerfile                  # imagem hardened (FALHAS 1 a 6 corrigidas)
 ├── .dockerignore
-└── scripts/docker-run-seguro.sh
+├── scripts/docker-run-seguro.sh
+└── docs/evidencias/           # saídas antes × depois das ferramentas
 ```
 
 > Nunca versione `.env`, `*.db` ou logs (já estão no `.gitignore`). Segredos
