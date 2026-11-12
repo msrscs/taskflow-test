@@ -42,7 +42,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout do codigo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Rodar Checkov
         uses: bridgecrewio/checkov-action@master
@@ -62,7 +62,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout do codigo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # O tfsec foi incorporado ao Trivy (Aqua Security) como o subcomando
       # "trivy config". A action oficial do Trivy cobre esse caso de uso e
