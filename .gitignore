@@ -35,3 +35,15 @@ logs/
 *.tfvars
 !*.tfvars.example
 crash.log
+
+# Caches de ferramentas
+.ruff_cache/
+.pytest_cache/
+
+# Relatorios gerados localmente (os oficiais ficam em docs/evidencias/)
+report_*.html
+report_*.md
+*.sarif
+# O ZAP grava zap.yaml e relatorios na pasta montada; so as regras sao versionadas
+.zap/*
+!.zap/rules.tsv
