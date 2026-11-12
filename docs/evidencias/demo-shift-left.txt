@@ -1,0 +1,71 @@
+Ensaio local da demo de shift-left - 12/11/2026
+================================================
+Copia da branch owasp-mapeamento (git archive HEAD) com UMA falha introduzida
+por vez. Mesmas versoes e mesmas opcoes dos workflows (Semgrep 1.185.0 com
+--error; ZAP Baseline stable com .zap/rules.tsv e -a).
+
+---------------------------------------------------------------------------
+CENARIO 1 - XSS: reintroduzir "| safe" em templates/tasks.html (linha 39)
+---------------------------------------------------------------------------
+- <b>{{ task['title'] }}</b> - {{ task['description'] }}
++ <b>{{ task['title'] | safe }}</b> - {{ task['description'] }}
+
+$ semgrep scan --config=p/python --config=p/flask --config=p/security-audit --error
+
+    templates/tasks.html
+    ❯❱ python.flask.security.xss.audit.template-unescaped-with-safe.template-unescaped-with-safe
+          ❰❰ Blocking ❱❱
+          Detected a segment of a Flask template where autoescaping is explicitly disabled with '| safe'
+          filter. This allows rendering of raw HTML in this segment. Ensure no user data is rendered here,
+          otherwise this is a cross-site scripting (XSS) vulnerability.
+           39┆ <b>{{ task['title'] | safe }}</b> - {{ task['description'] }}
+
+ • Findings: 1 (1 blocking)
+Ran 212 rules on 66 files: 1 finding.
+exit=1                              -> job "SAST - Semgrep" VERMELHO
+
+---------------------------------------------------------------------------
+CENARIO 2 - header: remover X-Content-Type-Options (app.py, after_request)
+---------------------------------------------------------------------------
+-    response.headers["X-Content-Type-Options"] = "nosniff"
+
+$ zap-baseline.py -t http://localhost:5000 -c rules.tsv -a
+
+IGNORE: Non-Storable Content [10049] x 6
+IGNORE: Base64 Disclosure [10094] x 3
+IGNORE: Authentication Request Identified [10111] x 1
+IGNORE: Session Management Response Identified [10112] x 2
+IGNORE: Sec-Fetch-Dest Header is Missing [90005] x 12
+WARN-NEW: X-Content-Type-Options Header Missing [10021] x 2
+FAIL-NEW: 0	FAIL-INPROG: 0	WARN-NEW: 1	WARN-INPROG: 0	INFO: 0	IGNORE: 5	PASS: 65
+exit=2                              -> job "zap-baseline" VERMELHO
+
+---------------------------------------------------------------------------
+CONTRAPROVA - remover X-Frame-Options NAO serve para a demo
+---------------------------------------------------------------------------
+-    response.headers["X-Frame-Options"] = "DENY"
+
+$ zap-baseline.py -t http://localhost:5000 -c rules.tsv -a
+PASS: Anti-clickjacking Header [10020]
+FAIL-NEW: 0	FAIL-INPROG: 0	WARN-NEW: 0	WARN-INPROG: 0	INFO: 0	IGNORE: 5	PASS: 66
+exit=0                              -> continua VERDE
+
+Motivo: a CSP ja tem "frame-ancestors 'none'", que e a protecao moderna
+contra clickjacking. O X-Frame-Options e redundante (defesa em profundidade
+para navegadores antigos), e o ZAP aceita qualquer um dos dois.
+
+---------------------------------------------------------------------------
+ESTADO NORMAL (sem falha) - cabecalhos da imagem atual
+---------------------------------------------------------------------------
+$ curl -sI http://127.0.0.1:5000/login
+HTTP/1.1 200 OK
+Server: gunicorn
+Content-Security-Policy: default-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'self'; object-src 'none'
+X-Frame-Options: DENY
+X-Content-Type-Options: nosniff
+Referrer-Policy: same-origin
+Permissions-Policy: camera=(), microphone=(), geolocation=()
+Cross-Origin-Resource-Policy: same-origin
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: require-corp
+Set-Cookie: session=<omitido>; HttpOnly; Path=/; SameSite=Lax

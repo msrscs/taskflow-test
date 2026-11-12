@@ -27,6 +27,11 @@ com o mesmo `.zap/rules.tsv` nas duas versões.
 | **Testes manuais** (curl) | SQLi `admin' --` **entra sem senha**; XSS armazenado **executa**; `/debug/info` abre o **Werkzeug Debugger** | SQLi recusado (200, fica no login); XSS **escapado**; `/debug/info` = **404** | `testes-manuais-sqli-xss-debug.txt`, `antes/debug-info-werkzeug-debugger.txt` |
 | **Gitleaks** | no leaks found (ver observação) | no leaks found | `*/gitleaks.txt` |
 
+Mapeamento de cada achado para o OWASP Top 10:2025:
+[`../owasp-mapeamento.md`](../owasp-mapeamento.md). Ensaio da demo de
+shift-left (Semgrep e ZAP ficando vermelhos com uma falha introduzida):
+[`demo-shift-left.txt`](demo-shift-left.txt).
+
 ## Observações (importantes para a apresentação)
 
 - **O ZAP Baseline é passivo.** Ele analisa respostas e cabeçalhos, mas não

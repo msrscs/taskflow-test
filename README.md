@@ -343,6 +343,17 @@ Evidências reais do antes × depois (Semgrep, pip-audit, Trivy, `docker
 history`, ZAP e testes manuais de SQLi e XSS) estão em
 [`docs/evidencias/`](docs/evidencias/README.md).
 
+O mapeamento completo, alerta por alerta do ZAP (ID, CWE, risco, antes e
+depois) e achado por achado das outras ferramentas, com o risco residual de
+cada categoria, está em [`docs/owasp-mapeamento.md`](docs/owasp-mapeamento.md).
+
+### Demo de shift-left
+
+Roteiro ensaiado em [`docs/demo-shift-left.md`](docs/demo-shift-left.md): um
+PR que reintroduz `| safe` no template deixa o `SAST - Semgrep` vermelho, e um
+que remove o header `nosniff` deixa o `zap-baseline` vermelho. O merge fica
+bloqueado até o revert.
+
 ## Decisões técnicas e trade-offs
 
 - **`iac-scan.yml` sem filtro `paths:`.** Com o filtro, o scan só rodaria
@@ -425,6 +436,8 @@ history`, ZAP e testes manuais de SQLi e XSS) estão em
 │   └── brute_force.sh          # simulação de força bruta (só no lab)
 └── docs/
     ├── runbook-forca-bruta.md  # NIST SP 800-61, exercitado com dados reais
+    ├── owasp-mapeamento.md     # achados (ZAP e demais) -> OWASP Top 10:2025
+    ├── demo-shift-left.md      # roteiro da demo do gate barrando o PR
     └── evidencias/             # antes × depois + observabilidade
 ```
 
