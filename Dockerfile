@@ -25,7 +25,7 @@
 # Nada deste estagio (cache do pip, arquivos temporarios) vai para a
 # imagem final, so o /opt/venv pronto.
 # ===========================================================================
-FROM python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b AS build
+FROM python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS build
 
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
@@ -43,7 +43,7 @@ RUN pip install --require-hashes --no-deps -r requirements.txt
 # ===========================================================================
 # Estagio 2: runtime - imagem final minima.
 # ===========================================================================
-FROM python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b AS runtime
+FROM python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS runtime
 
 # CORRIGIDO (FALHA 6): debug desligado explicitamente (o app.py ja usa
 # false como padrao) e bytecode/buffer do Python ajustados para container.
