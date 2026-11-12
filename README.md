@@ -225,6 +225,10 @@ seguras:
 No fim, o script imprime as evidências: flags aplicadas, `uid=10001` e uma
 tentativa de escrita recusada com `Read-only file system`.
 
+O **host** também foi auditado com o Lynis: hardening index de 66 para 68,
+com o único warning (glibc vulnerável) eliminado e 3 achados corrigidos.
+Detalhes em [`docs/lynis.md`](docs/lynis.md).
+
 ## Como executar com Docker Compose (app + PostgreSQL)
 
 ```bash
@@ -327,8 +331,9 @@ Resultado do exercício de 12/11/2026:
 - o usuário legítimo, com 2 erros de senha, ficou em *Normal*;
 - nenhuma senha apareceu no Loki.
 
-Evidências em [`docs/evidencias/observabilidade/`](docs/evidencias/observabilidade/)
-e tratamento completo nas 4 fases do NIST SP 800-61 no
+Evidências em [`docs/evidencias/observabilidade/`](docs/evidencias/observabilidade/),
+prints do [dashboard](docs/evidencias/grafana-forca-bruta.png) e do
+[alerta disparado](docs/evidencias/grafana-alerta.png), e tratamento completo nas 4 fases do NIST SP 800-61 no
 **[runbook de força bruta](docs/runbook-forca-bruta.md)**.
 
 ## Vulnerabilidades corrigidas
@@ -364,6 +369,12 @@ Roteiro ensaiado em [`docs/demo-shift-left.md`](docs/demo-shift-left.md): um
 PR que reintroduz `| safe` no template deixa o `SAST - Semgrep` vermelho, e um
 que remove o header `nosniff` deixa o `zap-baseline` vermelho. O merge fica
 bloqueado até o revert.
+
+Executada no GitHub em 12/11/2026 (PR #18, fechado sem merge). Mesmo com a
+aprovação de um code owner, o merge ficou bloqueado pelo Semgrep:
+[checks vermelhos](docs/evidencias/demo-checks-vermelhos.png),
+[merge bloqueado](docs/evidencias/demo-merge-bloqueado.png) e
+[checks verdes depois do revert](docs/evidencias/demo-checks-verdes.png).
 
 ## Decisões técnicas e trade-offs
 
@@ -449,6 +460,7 @@ bloqueado até o revert.
     ├── runbook-forca-bruta.md  # NIST SP 800-61, exercitado com dados reais
     ├── owasp-mapeamento.md     # achados (ZAP e demais) -> OWASP Top 10:2025
     ├── demo-shift-left.md      # roteiro da demo do gate barrando o PR
+    ├── lynis.md                # auditoria do host: 3 achados, índice 66 -> 68
     └── evidencias/             # antes × depois + observabilidade
 ```
 
