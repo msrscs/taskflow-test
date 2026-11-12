@@ -1,0 +1,19 @@
+# Testes manuais (curl) - complementam o ZAP Baseline, que e passivo e nao testa SQLi/XSS
+# Gerado em 2026-11-12T13:42Z. Antes: app-exemplo original (python:3.7, ver README). Depois: imagem hardened.
+
+== antes: SQL Injection no login (username=admin' -- , senha errada)
+HTTP 302 -> redirect: http://127.0.0.1:5001/tasks
+== antes: XSS armazenado (tarefa com titulo <script>alert(1)</script>)
+payload VOLTOU CRU no HTML -> script executa (vulneravel)
+   trecho: <b><script>alert(1)</script></b> - teste
+== antes: GET /debug/info
+HTTP 500
+
+== depois: SQL Injection no login (username=admin' -- , senha errada)
+HTTP 200 -> redirect: 
+== depois: XSS armazenado (tarefa com titulo <script>alert(1)</script>)
+payload ESCAPADO pelo autoescape do Jinja2 (corrigido)
+   trecho: <b>&lt;script&gt;alert(1)&lt;/script&gt;</b> - teste
+== depois: GET /debug/info
+HTTP 404
+

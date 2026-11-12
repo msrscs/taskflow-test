@@ -1,0 +1,13 @@
+Traceback (most recent call last):
+  File "/app/app.py", line 27, in <module>
+    app = Flask(__name__)
+  File "/usr/local/lib/python3.15/site-packages/flask/app.py", line 357, in __init__
+    instance_path = self.auto_find_instance_path()
+  File "/usr/local/lib/python3.15/site-packages/flask/app.py", line 662, in auto_find_instance_path
+    prefix, package_path = find_package(self.import_name)
+                           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.15/site-packages/flask/helpers.py", line 759, in find_package
+    loader = pkgutil.get_loader(root_mod_name)
+             ^^^^^^^^^^^^^^^^^^
+AttributeError: module 'pkgutil' has no attribute 'get_loader'
+Python 3.15.2

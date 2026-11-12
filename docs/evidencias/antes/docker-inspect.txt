@@ -1,0 +1,1 @@
+User=""  Env=[PATH=/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin LANG=C.UTF-8 PYTHON_VERSION=3.15.2 PYTHON_SHA256=8b5536d280142ecf6cdfe15d12a21ba1c65e300bbf7b28a8d0cdb849575797de ADMIN_PASSWORD=admin123]  Cmd=[python app.py]

@@ -1,0 +1,249 @@
+
+Report Summary
+
+┌─────────────────────────────────────────────────────────────────────────────┬────────────┬─────────────────┬─────────┐
+│                                   Target                                    │    Type    │ Vulnerabilities │ Secrets │
+├─────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┼─────────┤
+│ taskflow:antes (debian 13.7)                                                │   debian   │       36        │    -    │
+├─────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┼─────────┤
+│ Python                                                                      │ python-pkg │        5        │    -    │
+├─────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┼─────────┤
+│ usr/local/lib/python3.15/site-packages/Flask-0.12.2.dist-info/METADATA      │ python-pkg │        3        │    -    │
+├─────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┼─────────┤
+│ usr/local/lib/python3.15/site-packages/Jinja2-2.11.3.dist-info/METADATA     │ python-pkg │        0        │    -    │
+├─────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┼─────────┤
+│ usr/local/lib/python3.15/site-packages/Werkzeug-0.15.4.dist-info/METADATA   │ python-pkg │        3        │    -    │
+├─────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┼─────────┤
+│ usr/local/lib/python3.15/site-packages/click-8.5.1.dist-info/METADATA       │ python-pkg │        0        │    -    │
+├─────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┼─────────┤
+│ usr/local/lib/python3.15/site-packages/itsdangerous-0.24.dist-info/METADATA │ python-pkg │        0        │    -    │
+├─────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┼─────────┤
+│ usr/local/lib/python3.15/site-packages/markupsafe-2.0.1.dist-info/METADATA  │ python-pkg │        0        │    -    │
+├─────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┼─────────┤
+│ usr/local/lib/python3.15/site-packages/pip-26.2.2.dist-info/METADATA        │ python-pkg │        0        │    -    │
+├─────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┼─────────┤
+│ usr/local/lib/python3.15/site-packages/pyyaml-5.1.dist-info/METADATA        │ python-pkg │        3        │    -    │
+├─────────────────────────────────────────────────────────────────────────────┼────────────┼─────────────────┼─────────┤
+│ usr/local/lib/python3.15/site-packages/requests-2.6.0.dist-info/METADATA    │ python-pkg │        1        │    -    │
+└─────────────────────────────────────────────────────────────────────────────┴────────────┴─────────────────┴─────────┘
+Legend:
+- '-': Not scanned
+- '0': Clean (no security findings detected)
+
+
+taskflow:antes (debian 13.7)
+============================
+Total: 36 (HIGH: 32, CRITICAL: 4)
+
+┌───────────────────┬────────────────┬──────────┬────────┬─────────────────────────────┬──────────────────────────────────┬──────────────────────────────────────────────────────────────┐
+│      Library      │ Vulnerability  │ Severity │ Status │      Installed Version      │          Fixed Version           │                            Title                             │
+├───────────────────┼────────────────┼──────────┼────────┼─────────────────────────────┼──────────────────────────────────┼──────────────────────────────────────────────────────────────┤
+│ libopenexr-3-1-30 │ CVE-2026-42216 │ CRITICAL │ fixed  │ 3.1.13-2                    │ 3.2.12-1~deb13u1                 │ OpenEXR: OpenEXR: Information disclosure and denial of       │
+│                   │                │          │        │                             │                                  │ service via malformed EXR files...                           │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-42216                   │
+│                   ├────────────────┤          │        │                             │                                  ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-42217 │          │        │                             │                                  │ OpenEXR: OpenEXR: Information disclosure via malformed EXR   │
+│                   │                │          │        │                             │                                  │ image file processing                                        │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-42217                   │
+│                   ├────────────────┼──────────┤        │                             │                                  ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-27622 │ HIGH     │        │                             │                                  │ openexr: OpenEXR: Arbitrary code execution via integer       │
+│                   │                │          │        │                             │                                  │ overflow in EXR file processing...                           │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-27622                   │
+│                   ├────────────────┤          │        │                             │                                  ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-34379 │          │        │                             │                                  │ OpenEXR: OpenEXR: Denial of Service due to misaligned memory │
+│                   │                │          │        │                             │                                  │ write during EXR...                                          │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-34379                   │
+│                   ├────────────────┤          │        │                             │                                  ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-34543 │          │        │                             │                                  │ OpenEXR: OpenEXR: Information disclosure via malicious EXR   │
+│                   │                │          │        │                             │                                  │ file                                                         │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-34543                   │
+│                   ├────────────────┤          │        │                             │                                  ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-34544 │          │        │                             │                                  │ OpenEXR: OpenEXR: Memory corruption and Denial of Service    │
+│                   │                │          │        │                             │                                  │ via crafted EXR file...                                      │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-34544                   │
+│                   ├────────────────┤          │        │                             │                                  ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-34588 │          │        │                             │                                  │ OpenEXR: OpenEXR: Arbitrary code execution and information   │
+│                   │                │          │        │                             │                                  │ disclosure via crafted EXR file...                           │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-34588                   │
+│                   ├────────────────┤          │        │                             │                                  ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-40244 │          │        │                             │                                  │ OpenEXR: OpenEXR: Arbitrary code execution via integer       │
+│                   │                │          │        │                             │                                  │ overflow in EXR image processing...                          │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-40244                   │
+│                   ├────────────────┤          │        │                             │                                  ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-40250 │          │        │                             │                                  │ OpenEXR: OpenEXR: Integer overflow leads to memory           │
+│                   │                │          │        │                             │                                  │ corruption and denial of service...                          │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-40250                   │
+│                   ├────────────────┤          │        │                             │                                  ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-41142 │          │        │                             │                                  │ OpenEXR: OpenEXR: Arbitrary code execution via integer       │
+│                   │                │          │        │                             │                                  │ overflow in image resizing                                   │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-41142                   │
+│                   ├────────────────┤          │        │                             │                                  ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-59184 │          │        │                             │                                  │ OpenEXR: OpenEXR: Out-of-bounds write vulnerability via      │
+│                   │                │          │        │                             │                                  │ crafted EXR files                                            │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-59184                   │
+│                   ├────────────────┤          │        │                             │                                  ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-59186 │          │        │                             │                                  │ OpenEXR: OpenEXR: Heap out-of-bounds write via crafted tiled │
+│                   │                │          │        │                             │                                  │ EXR file                                                     │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-59186                   │
+│                   ├────────────────┤          │        │                             │                                  ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-59189 │          │        │                             │                                  │ OpenEXR: OpenEXR: Information disclosure and denial of       │
+│                   │                │          │        │                             │                                  │ service due to out-of-bounds read...                         │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-59189                   │
+│                   ├────────────────┤          │        │                             │                                  ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-59981 │          │        │                             │                                  │ OpenEXR: OpenEXR: Information disclosure and denial of       │
+│                   │                │          │        │                             │                                  │ service via out-of-bounds read                               │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-59981                   │
+│                   ├────────────────┤          │        │                             │                                  ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-59982 │          │        │                             │                                  │ OpenEXR: OpenEXR: Denial of Service or Information           │
+│                   │                │          │        │                             │                                  │ Disclosure via crafted EXR image...                          │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-59982                   │
+│                   ├────────────────┤          │        │                             │                                  ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-68515 │          │        │                             │                                  │ OpenEXR: OpenEXR: Heap out-of-bounds write in exrmultiview   │
+│                   │                │          │        │                             │                                  │ via crafted EXR files                                        │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-68515                   │
+├───────────────────┼────────────────┼──────────┤        │                             │                                  ├──────────────────────────────────────────────────────────────┤
+│ libopenexr-dev    │ CVE-2026-42216 │ CRITICAL │        │                             │                                  │ OpenEXR: OpenEXR: Information disclosure and denial of       │
+│                   │                │          │        │                             │                                  │ service via malformed EXR files...                           │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-42216                   │
+│                   ├────────────────┤          │        │                             │                                  ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-42217 │          │        │                             │                                  │ OpenEXR: OpenEXR: Information disclosure via malformed EXR   │
+│                   │                │          │        │                             │                                  │ image file processing                                        │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-42217                   │
+│                   ├────────────────┼──────────┤        │                             │                                  ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-27622 │ HIGH     │        │                             │                                  │ openexr: OpenEXR: Arbitrary code execution via integer       │
+│                   │                │          │        │                             │                                  │ overflow in EXR file processing...                           │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-27622                   │
+│                   ├────────────────┤          │        │                             │                                  ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-34379 │          │        │                             │                                  │ OpenEXR: OpenEXR: Denial of Service due to misaligned memory │
+│                   │                │          │        │                             │                                  │ write during EXR...                                          │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-34379                   │
+│                   ├────────────────┤          │        │                             │                                  ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-34543 │          │        │                             │                                  │ OpenEXR: OpenEXR: Information disclosure via malicious EXR   │
+│                   │                │          │        │                             │                                  │ file                                                         │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-34543                   │
+│                   ├────────────────┤          │        │                             │                                  ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-34544 │          │        │                             │                                  │ OpenEXR: OpenEXR: Memory corruption and Denial of Service    │
+│                   │                │          │        │                             │                                  │ via crafted EXR file...                                      │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-34544                   │
+│                   ├────────────────┤          │        │                             │                                  ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-34588 │          │        │                             │                                  │ OpenEXR: OpenEXR: Arbitrary code execution and information   │
+│                   │                │          │        │                             │                                  │ disclosure via crafted EXR file...                           │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-34588                   │
+│                   ├────────────────┤          │        │                             │                                  ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-40244 │          │        │                             │                                  │ OpenEXR: OpenEXR: Arbitrary code execution via integer       │
+│                   │                │          │        │                             │                                  │ overflow in EXR image processing...                          │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-40244                   │
+│                   ├────────────────┤          │        │                             │                                  ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-40250 │          │        │                             │                                  │ OpenEXR: OpenEXR: Integer overflow leads to memory           │
+│                   │                │          │        │                             │                                  │ corruption and denial of service...                          │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-40250                   │
+│                   ├────────────────┤          │        │                             │                                  ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-41142 │          │        │                             │                                  │ OpenEXR: OpenEXR: Arbitrary code execution via integer       │
+│                   │                │          │        │                             │                                  │ overflow in image resizing                                   │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-41142                   │
+│                   ├────────────────┤          │        │                             │                                  ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-59184 │          │        │                             │                                  │ OpenEXR: OpenEXR: Out-of-bounds write vulnerability via      │
+│                   │                │          │        │                             │                                  │ crafted EXR files                                            │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-59184                   │
+│                   ├────────────────┤          │        │                             │                                  ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-59186 │          │        │                             │                                  │ OpenEXR: OpenEXR: Heap out-of-bounds write via crafted tiled │
+│                   │                │          │        │                             │                                  │ EXR file                                                     │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-59186                   │
+│                   ├────────────────┤          │        │                             │                                  ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-59189 │          │        │                             │                                  │ OpenEXR: OpenEXR: Information disclosure and denial of       │
+│                   │                │          │        │                             │                                  │ service due to out-of-bounds read...                         │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-59189                   │
+│                   ├────────────────┤          │        │                             │                                  ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-59981 │          │        │                             │                                  │ OpenEXR: OpenEXR: Information disclosure and denial of       │
+│                   │                │          │        │                             │                                  │ service via out-of-bounds read                               │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-59981                   │
+│                   ├────────────────┤          │        │                             │                                  ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-59982 │          │        │                             │                                  │ OpenEXR: OpenEXR: Denial of Service or Information           │
+│                   │                │          │        │                             │                                  │ Disclosure via crafted EXR image...                          │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-59982                   │
+│                   ├────────────────┤          │        │                             │                                  ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-68515 │          │        │                             │                                  │ OpenEXR: OpenEXR: Heap out-of-bounds write in exrmultiview   │
+│                   │                │          │        │                             │                                  │ via crafted EXR files                                        │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-68515                   │
+├───────────────────┼────────────────┤          │        ├─────────────────────────────┼──────────────────────────────────┼──────────────────────────────────────────────────────────────┤
+│ zlib1g            │ CVE-2026-76844 │          │        │ 1:1.3.dfsg+really1.3.1-1+b1 │ 1:1.3.dfsg+really1.3.1-1+deb13u1 │ zlib: zlib 1.2.11 through 1.3.2 Heap Buffer Overflow via     │
+│                   │                │          │        │                             │                                  │ Stale gzwrite Pointer...                                     │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-76844                   │
+│                   ├────────────────┤          │        │                             │                                  ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-85091 │          │        │                             │                                  │ zlib: zlib: Heap buffer overflow in gz_vacate() allows       │
+│                   │                │          │        │                             │                                  │ arbitrary code execution                                     │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-85091                   │
+├───────────────────┼────────────────┤          │        │                             │                                  ├──────────────────────────────────────────────────────────────┤
+│ zlib1g-dev        │ CVE-2026-76844 │          │        │                             │                                  │ zlib: zlib 1.2.11 through 1.3.2 Heap Buffer Overflow via     │
+│                   │                │          │        │                             │                                  │ Stale gzwrite Pointer...                                     │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-76844                   │
+│                   ├────────────────┤          │        │                             │                                  ├──────────────────────────────────────────────────────────────┤
+│                   │ CVE-2026-85091 │          │        │                             │                                  │ zlib: zlib: Heap buffer overflow in gz_vacate() allows       │
+│                   │                │          │        │                             │                                  │ arbitrary code execution                                     │
+│                   │                │          │        │                             │                                  │ https://avd.aquasec.com/nvd/cve-2026-85091                   │
+└───────────────────┴────────────────┴──────────┴────────┴─────────────────────────────┴──────────────────────────────────┴──────────────────────────────────────────────────────────────┘
+
+Python (python-pkg)
+===================
+Total: 15 (HIGH: 12, CRITICAL: 3)
+
+┌─────────────────────┬─────────────────────┬──────────┬────────┬───────────────────┬───────────────┬──────────────────────────────────────────────────────────────┐
+│       Library       │    Vulnerability    │ Severity │ Status │ Installed Version │ Fixed Version │                            Title                             │
+├─────────────────────┼─────────────────────┼──────────┼────────┼───────────────────┼───────────────┼──────────────────────────────────────────────────────────────┤
+│ Flask (METADATA)    │ CVE-2018-1000656    │ HIGH     │ fixed  │ 0.12.2            │ 0.12.3        │ python-flask: Denial of Service via crafted JSON file        │
+│                     │                     │          │        │                   │               │ https://avd.aquasec.com/nvd/cve-2018-1000656                 │
+│                     ├─────────────────────┤          │        │                   ├───────────────┼──────────────────────────────────────────────────────────────┤
+│                     │ CVE-2019-1010083    │          │        │                   │ 1.0           │ python-flask: unexpected memory usage can lead to denial of  │
+│                     │                     │          │        │                   │               │ service via crafted...                                       │
+│                     │                     │          │        │                   │               │ https://avd.aquasec.com/nvd/cve-2019-1010083                 │
+│                     ├─────────────────────┤          │        │                   ├───────────────┼──────────────────────────────────────────────────────────────┤
+│                     │ CVE-2023-30861      │          │        │                   │ 2.3.2, 2.2.5  │ flask: Possible disclosure of permanent session cookie due   │
+│                     │                     │          │        │                   │               │ to missing Vary: Cookie...                                   │
+│                     │                     │          │        │                   │               │ https://avd.aquasec.com/nvd/cve-2023-30861                   │
+├─────────────────────┼─────────────────────┼──────────┤        ├───────────────────┼───────────────┼──────────────────────────────────────────────────────────────┤
+│ PyYAML (METADATA)   │ CVE-2019-20477      │ CRITICAL │        │ 5.1               │ 5.2           │ PyYAML: command execution through python/object/apply        │
+│                     │                     │          │        │                   │               │ constructor in FullLoader                                    │
+│                     │                     │          │        │                   │               │ https://avd.aquasec.com/nvd/cve-2019-20477                   │
+│                     ├─────────────────────┤          │        │                   ├───────────────┼──────────────────────────────────────────────────────────────┤
+│                     │ CVE-2020-14343      │          │        │                   │ 5.4           │ PyYAML: incomplete fix for CVE-2020-1747                     │
+│                     │                     │          │        │                   │               │ https://avd.aquasec.com/nvd/cve-2020-14343                   │
+│                     ├─────────────────────┤          │        │                   ├───────────────┼──────────────────────────────────────────────────────────────┤
+│                     │ CVE-2020-1747       │          │        │                   │ 5.3.1         │ PyYAML: arbitrary command execution through                  │
+│                     │                     │          │        │                   │               │ python/object/new when FullLoader is used                    │
+│                     │                     │          │        │                   │               │ https://avd.aquasec.com/nvd/cve-2020-1747                    │
+├─────────────────────┼─────────────────────┼──────────┤        ├───────────────────┼───────────────┼──────────────────────────────────────────────────────────────┤
+│ Werkzeug (METADATA) │ CVE-2019-14322      │ HIGH     │        │ 0.15.4            │ 0.15.5        │ Pallets Werkzeug vulnerable to Path Traversal                │
+│                     │                     │          │        │                   │               │ https://avd.aquasec.com/nvd/cve-2019-14322                   │
+│                     ├─────────────────────┤          │        │                   ├───────────────┼──────────────────────────────────────────────────────────────┤
+│                     │ CVE-2023-25577      │          │        │                   │ 2.2.3         │ python-werkzeug: high resource usage when parsing multipart  │
+│                     │                     │          │        │                   │               │ form data with many fields...                                │
+│                     │                     │          │        │                   │               │ https://avd.aquasec.com/nvd/cve-2023-25577                   │
+│                     ├─────────────────────┤          │        │                   ├───────────────┼──────────────────────────────────────────────────────────────┤
+│                     │ CVE-2024-34069      │          │        │                   │ 3.0.3         │ python-werkzeug: user may execute code on a developer's      │
+│                     │                     │          │        │                   │               │ machine                                                      │
+│                     │                     │          │        │                   │               │ https://avd.aquasec.com/nvd/cve-2024-34069                   │
+├─────────────────────┼─────────────────────┤          │        ├───────────────────┼───────────────┼──────────────────────────────────────────────────────────────┤
+│ msgpack             │ CVE-2026-114613     │          │        │ 1.1.2             │ 1.2.3         │ msgpack: msgpack: Denial of Service via memory leak during   │
+│                     │                     │          │        │                   │               │ map deserialization                                          │
+│                     │                     │          │        │                   │               │ https://avd.aquasec.com/nvd/cve-2026-114613                  │
+│                     ├─────────────────────┤          │        │                   ├───────────────┼──────────────────────────────────────────────────────────────┤
+│                     │ GHSA-6v7p-g79w-8964 │          │        │                   │ 1.2.1         │ MessagePack for Python: Out-of-bounds read / crash on        │
+│                     │                     │          │        │                   │               │ Unpacker reuse after a...                                    │
+│                     │                     │          │        │                   │               │ https://github.com/advisories/GHSA-6v7p-g79w-8964            │
+├─────────────────────┼─────────────────────┤          │        ├───────────────────┼───────────────┼──────────────────────────────────────────────────────────────┤
+│ requests (METADATA) │ CVE-2018-18074      │          │        │ 2.6.0             │ 2.20.0        │ python-requests: Redirect from HTTPS to HTTP does not remove │
+│                     │                     │          │        │                   │               │ Authorization header                                         │
+│                     │                     │          │        │                   │               │ https://avd.aquasec.com/nvd/cve-2018-18074                   │
+├─────────────────────┼─────────────────────┤          │        ├───────────────────┼───────────────┼──────────────────────────────────────────────────────────────┤
+│ setuptools          │ CVE-2025-47273      │          │        │ 70.3.0            │ 78.1.1        │ setuptools: Path Traversal Vulnerability in setuptools       │
+│                     │                     │          │        │                   │               │ PackageIndex                                                 │
+│                     │                     │          │        │                   │               │ https://avd.aquasec.com/nvd/cve-2025-47273                   │
+├─────────────────────┼─────────────────────┤          │        ├───────────────────┼───────────────┼──────────────────────────────────────────────────────────────┤
+│ urllib3             │ CVE-2026-97687      │          │        │ 2.7.0             │ 2.8.0         │ urllib3: urllib3: Traffic interception via HTTPS proxy TLS   │
+│                     │                     │          │        │                   │               │ configuration override                                       │
+│                     │                     │          │        │                   │               │ https://avd.aquasec.com/nvd/cve-2026-97687                   │
+│                     ├─────────────────────┤          │        │                   │               ├──────────────────────────────────────────────────────────────┤
+│                     │ CVE-2026-97689      │          │        │                   │               │ urllib3: urllib3: Denial of Service via unbounded memory     │
+│                     │                     │          │        │                   │               │ allocation in chunk parser...                                │
+│                     │                     │          │        │                   │               │ https://avd.aquasec.com/nvd/cve-2026-97689                   │
+└─────────────────────┴─────────────────────┴──────────┴────────┴───────────────────┴───────────────┴──────────────────────────────────────────────────────────────┘
