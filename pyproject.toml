@@ -1,0 +1,10 @@
+# Configuracao do ruff (lint + formatacao), usada pelo job "build-e-lint"
+# do ci-basico.yml. O PDF da atividade exige lint com ruff ou flake8.
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# E/W = pycodestyle, F = pyflakes, B = bugbear,
+# S = regras de seguranca (equivalentes ao bandit).
+select = ["E", "F", "W", "B", "S"]

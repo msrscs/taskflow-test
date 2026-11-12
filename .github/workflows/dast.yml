@@ -43,10 +43,17 @@ jobs:
         run: docker build -f Dockerfile -t "$IMAGE" .
 
       - name: Subir a TaskFlow em background
+        # Mesmas flags de runtime seguras de scripts/docker-run-seguro.sh:
+        # raiz somente leitura, /data e /tmp como tmpfs do usuario 10001,
+        # sem capabilities, sem escalada de privilegio e com limites.
         run: |
           docker run -d --name "$CONTAINER" -p 5000:5000 \
+            --read-only \
+            --tmpfs /data:rw,noexec,nosuid,size=64m,uid=10001,gid=10001,mode=0700 \
+            --tmpfs /tmp:rw,noexec,nosuid,size=16m,uid=10001,gid=10001,mode=0700 \
             --cap-drop=ALL \
             --security-opt=no-new-privileges \
+            --memory=256m --cpus=1 --pids-limit=100 \
             -e TASKFLOW_SECRET_KEY="$(openssl rand -hex 32)" \
             -e TASKFLOW_ADMIN_PASSWORD="$(openssl rand -hex 16)" \
             -e FLASK_DEBUG=false \

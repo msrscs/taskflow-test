@@ -1,0 +1,24 @@
+# Dependencias DIRETAS da TaskFlow (fonte editavel).
+#
+# O requirements.txt e GERADO a partir deste arquivo, com todas as
+# dependencias transitivas fixadas e o hash SHA-256 de cada pacote:
+#
+#     pip-compile --generate-hashes --strip-extras requirements.in
+#
+# Com os hashes, o Dockerfile instala com "pip install --require-hashes"
+# (correcao da FALHA 3): se um pacote baixado do PyPI nao bater com o hash
+# registrado aqui, a instalacao falha. O Dependabot entende esse formato
+# (pip-compile) e atualiza os dois arquivos juntos.
+#
+# Versoes sem CVEs conhecidas na data da atualizacao (pip-audit --strict).
+# Novas CVEs surgem o tempo todo: o sca.yml e o Dependabot cuidam disso.
+
+Flask==3.1.3
+Jinja2==3.1.6
+Werkzeug==3.1.9
+PyYAML==6.0.2
+requests==2.33.0
+markupsafe==3.0.4
+itsdangerous==2.2.0
+# Servidor WSGI de producao usado no Dockerfile (correcao das FALHAS 5 e 6).
+gunicorn==27.0.0

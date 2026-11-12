@@ -1,0 +1,50 @@
+# Container - build da imagem + Trivy image como gate (Modulo 2).
+#
+# Builda o Dockerfile da RAIZ (o mesmo usado no DAST e em producao; o PDF
+# alerta para o erro de corrigir o Dockerfile e continuar escaneando outro
+# com "-f" errado) e reprova o job se a imagem tiver vulnerabilidade
+# HIGH ou CRITICAL com correcao disponivel.
+#
+# ignore-unfixed: CVEs sem correcao publicada nao sao acionaveis (nao ha
+# versao para onde atualizar) e travariam todos os PRs sem que o time
+# pudesse fazer nada; elas continuam visiveis no "trivy image" sem filtro.
+#
+# O nome do job (trivy-image) e o nome do required check na main.
+
+name: Container
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  trivy-image:
+    name: trivy-image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      IMAGE: taskflow:${{ github.sha }}
+    steps:
+      - name: Checkout do codigo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build da imagem (Dockerfile da raiz)
+        run: docker build -f Dockerfile -t "$IMAGE" .
+
+      - name: Trivy image (gate HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}
+          version: v0.70.0
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+
+      - name: Usuario da imagem (evidencia de que nao roda como root)
+        run: docker inspect "$IMAGE" --format 'USER={{.Config.User}}'

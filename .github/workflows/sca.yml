@@ -1,55 +1,52 @@
-# =============================================================================
-# Workflow de exemplo: SCA (Software Composition Analysis) com pip-audit
+# SCA (Software Composition Analysis) com pip-audit - Modulo 3.
 #
-# COMO USAR:
-#   Copie este arquivo para ".github/workflows/sca.yml" na raiz do seu
-#   repositório, ao lado do "sast.yml" (Encontro 6). Juntos, os dois
-#   workflows formam a "esteira segura" de análise estática do Módulo 3:
-#   sast.yml cuida do SEU código, sca.yml cuida do código de TERCEIROS
-#   (bibliotecas) que você importa.
+# sast.yml cuida do NOSSO codigo; este workflow cuida do codigo de
+# TERCEIROS (bibliotecas do requirements.txt). Qualquer CVE conhecida
+# falha o job (gate). Novas versoes chegam via PRs do Dependabot.
 #
-# O QUE ELE FAZ:
-#   Roda o pip-audit contra o requirements.txt do projeto, comparando cada
-#   dependência com o banco de dados de vulnerabilidades conhecidas mantido
-#   pela PyPA (Python Packaging Authority). Se encontrar qualquer CVE em
-#   qualquer dependência, o job falha.
-# =============================================================================
+# Padronizacao aplicada:
+#   - permissions: contents: read no topo (menor privilegio).
+#   - Actions pinadas por SHA, com a versao no comentario.
+#   - Python 3.12 (antes 3.11), igual ao CI e ao Dockerfile: auditar com a
+#     mesma versao usada em producao.
+#   - pip-audit com versao fixa e --strict: falha tambem se alguma
+#     dependencia nao puder ser auditada (antes ela seria pulada em silencio).
+#   - Gatilhos: PR (o gate), push na main e manual.
+#
+# O nome do job foi mantido (e o nome do required check).
 
-name: SCA - Auditoria de Dependências
+name: SCA - Auditoria de Dependencias
 
 on:
-  push:
-    branches: ["**"]
   pull_request:
-    branches: ["**"]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   pip-audit:
     name: SCA - pip-audit
-    #runs-on: ubuntu-latest
-    # *** Substituação 'ubuntu-latest' por uma versão estática LTS (como 24.04)
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
-      - name: Checkout do código
-        uses: actions/checkout@v4
+      - name: Checkout do codigo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Configurar Python
-        uses: actions/setup-python@v5
+      - name: Configurar Python 3.12
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          # python-version: "3.11"
-          # *** Fixar a versão do Python
-          python-version: "3.11"
+          python-version: "3.12"
 
-      - name: Instalar pip-audit
-        run: pip install pip-audit
+      - name: Instalar pip-audit (versao fixa)
+        run: pip install pip-audit==2.10.1
 
-      - name: Auditar requirements.txt do app-exemplo
-        run: pip-audit -r requirements.txt
-        # Sem flags extras, pip-audit retorna exit code != 0 assim que
-        # encontra qualquer vulnerabilidade conhecida (CVE) em qualquer
-        # pacote listado, o que falha este step e o job inteiro.
-
-      # Dica mostrada em aula (não obrigatória): também é possível rodar
-      # "trivy fs app-exemplo/" aqui como segunda camada de verificação,
-      # já que o Trivy usa outras fontes de vulnerabilidade além do
-      # banco de dados da PyPA. Fica como exercício opcional.
+      # O requirements.txt e gerado do requirements.in (pip-compile) e ja
+      # lista as dependencias transitivas, que tambem sao auditadas.
+      - name: Auditar requirements.txt
+        # Exit code != 0 em qualquer CVE conhecida -> job vermelho.
+        # Se um dia for preciso aceitar uma CVE sem correcao, use
+        # --ignore-vuln <ID> COM justificativa no README.
+        run: pip-audit -r requirements.txt --strict

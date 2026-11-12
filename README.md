@@ -1,77 +1,258 @@
-# TaskFlow (App de Exemplo) — Disciplina DevSecOps
+# TaskFlow — Esteira DevSecOps
 
-Esta é a aplicação de laboratório usada em **todos os encontros práticos** da
-disciplina. É um gerenciador de tarefas (to-do list) simples em Python/Flask,
-propositalmente vulnerável, que evolui ao longo do curso:
+![CI](https://github.com/msrscs/taskflow-test/actions/workflows/ci-basico.yml/badge.svg)
+![SAST](https://github.com/msrscs/taskflow-test/actions/workflows/sast.yml/badge.svg)
+![SCA](https://github.com/msrscs/taskflow-test/actions/workflows/sca.yml/badge.svg)
+![Container](https://github.com/msrscs/taskflow-test/actions/workflows/container.yml/badge.svg)
+![DAST](https://github.com/msrscs/taskflow-test/actions/workflows/dast.yml/badge.svg)
+![IaC](https://github.com/msrscs/taskflow-test/actions/workflows/iac-scan.yml/badge.svg)
 
-- Módulos 1–2: usada para discutir arquitetura, pipeline e hardening.
-- Módulo 3: alvo de SAST (Semgrep) e SCA (pip-audit / Trivy) — os alunos
-  encontram SQLi, XSS, segredo hardcoded e dependências vulneráveis.
-- Módulo 4: alvo de DAST (OWASP ZAP) rodando contra a aplicação em execução.
-- Módulo 5: containerizada com Docker e provisionada via Docker Compose,
-  usada para praticar scanning de IaC.
-- Módulo 6: instrumentada com logging estruturado para observabilidade.
-- Módulo 7: base do projeto final — os alunos entregam a versão corrigida
-  com a esteira DevSecOps completa.
+A TaskFlow é um gerenciador de tarefas (to-do list) em Python/Flask, usado na
+disciplina de DevSecOps. Partindo da versão **propositalmente vulnerável**
+(`app-exemplo/`), este repositório entrega a aplicação **corrigida** e
+protegida por uma esteira de CI segura no GitHub Actions. Cada ferramenta é um
+**gate**: se ela encontra um problema, o check fica vermelho e o merge na
+`main` é bloqueado.
 
-## ⚠️ Aviso importante
+## Sumário
 
-Este código contém vulnerabilidades **intencionais** para fins didáticos
-(ver comentários `# FALHA` e docstring no topo de `app.py`). Nunca:
+- [Ciclo de vida seguro (S-SDLC)](#ciclo-de-vida-seguro-s-sdlc)
+- [Arquitetura](#arquitetura)
+- [A esteira (workflows)](#a-esteira-workflows)
+- [Como disparar cada workflow](#como-disparar-cada-workflow)
+- [Proteção da branch main](#proteção-da-branch-main)
+- [Como executar localmente](#como-executar-localmente)
+- [Como executar com Docker (hardened)](#como-executar-com-docker-hardened)
+- [Vulnerabilidades corrigidas](#vulnerabilidades-corrigidas)
+- [Decisões técnicas e trade-offs](#decisões-técnicas-e-trade-offs)
+- [Estrutura do repositório](#estrutura-do-repositório)
 
-- Use este código como referência de boas práticas.
-- Implante esta aplicação em ambiente de produção ou exposto à internet.
-- Reutilize o padrão de código (concatenação de SQL, senhas em texto puro,
-  segredo hardcoded) em projetos reais.
+## Ciclo de vida seguro (S-SDLC)
+
+Em que fase do ciclo entra cada ferramenta da esteira:
+
+```mermaid
+flowchart LR
+  A[Planejar<br/>modelagem de ameaças] --> B[Codificar<br/>ruff]
+  B --> C[Commit / PR<br/>Gitleaks · Semgrep]
+  C --> D[Build<br/>pip-audit · Dependabot<br/>Trivy image]
+  D --> E[Testar em execução<br/>OWASP ZAP Baseline]
+  E --> F[Provisionar<br/>Checkov · Trivy config]
+  F --> G[Operar<br/>container hardened<br/>Lynis]
+  G --> H[Monitorar<br/>logs JSON → Promtail<br/>→ Loki → Grafana]
+  H --> I[Responder<br/>runbook NIST SP 800-61]
+  I --> A
+```
+
+## Arquitetura
+
+```mermaid
+flowchart LR
+  U[Usuário / navegador] -->|"HTTP 127.0.0.1:5000"| G
+
+  subgraph C["Container taskflow (raiz somente leitura, UID 10001)"]
+    G[gunicorn<br/>2 workers] --> A[app.py<br/>Flask + Jinja2]
+    A -->|"/data/taskflow.db"| DB[(SQLite<br/>tmpfs / volume)]
+    A -->|"/data/logs/taskflow.log<br/>JSON + request_id"| L[logs]
+  end
+
+  L -.->|leitura| P[Promtail]
+  P --> LK[Loki]
+  LK --> GF[Grafana<br/>consultas LogQL]
+```
+
+- **Aplicação:** Flask servido pelo **gunicorn** (nunca pelo servidor de
+  desenvolvimento). HTML apenas via templates Jinja2 com autoescape.
+- **Container:** imagem `python:3.12-slim` fixada por digest, usuário não-root,
+  raiz somente leitura. Os únicos diretórios graváveis são `/data` (banco e
+  logs) e `/tmp`, montados como `tmpfs` ou volume.
+- **Rede:** a porta 5000 é publicada só no `localhost` do host
+  (`-p 127.0.0.1:5000:5000`).
+- **Observabilidade:** cada requisição gera um log JSON com `request_id`
+  (eventos `http_request`, `login_attempt`, `task_created`,
+  `tasks_list_accessed`), sem senha, token ou cookie. O Promtail lê os logs,
+  envia ao Loki e o Grafana consulta via LogQL.
+
+## A esteira (workflows)
+
+Todos os workflows têm `permissions: contents: read` (menor privilégio). Todas
+as actions são **pinadas por SHA de commit**, com a versão no comentário: uma
+tag como `@v4` pode ser movida pelo dono da action para outro código, o SHA
+não. O Dependabot atualiza SHA e comentário juntos.
+
+| Workflow | Job (required check) | O que faz | Reprova quando |
+|---|---|---|---|
+| `ci-basico.yml` | `build-e-lint` | Instala as dependências com `--require-hashes` e roda `ruff check` + `ruff format --check` | Erro de lint ou de formatação |
+| `sast.yml` | `SAST - Semgrep` | Semgrep com `p/python`, `p/flask` e `p/security-audit` (`--error`) | Qualquer achado no código |
+| `sast.yml` | `Secret Scanning - Gitleaks` | Gitleaks no **histórico completo** (`fetch-depth: 0`), com o binário conferido por SHA-256 | Qualquer segredo em qualquer commit |
+| `sca.yml` | `SCA - pip-audit` | `pip-audit --strict` no `requirements.txt` (inclui as dependências transitivas) | Qualquer CVE conhecida |
+| `container.yml` | `trivy-image` | Builda o `Dockerfile` da raiz e roda `trivy image` | CVE HIGH/CRITICAL com correção disponível |
+| `dast.yml` | `zap-baseline` | Builda a imagem, sobe a app **no próprio runner** com as flags seguras, espera o `/login` responder e roda o ZAP Baseline | Alerta não justificado em `.zap/rules.tsv` |
+| `iac-scan.yml` | `checkov` | Checkov em Terraform, Dockerfile e nos próprios workflows | Qualquer falha |
+| `iac-scan.yml` | `trivy-config` | Trivy config (sucessor do tfsec) | Má configuração HIGH/CRITICAL |
+
+Além dos workflows, o **Dependabot** (`.github/dependabot.yml`) abre PRs
+semanais para `pip`, `docker` (imagem base) e `github-actions`.
+
+## Como disparar cada workflow
+
+Todos os workflows disparam de três formas:
+
+1. **Pull Request**, que é o gate: abrir ou atualizar um PR roda a esteira
+   inteira.
+2. **Push na `main`**, depois do merge: confirma o estado da `main`.
+3. **Manualmente**, pela aba **Actions → (workflow) → Run workflow**, ou com o
+   GitHub CLI:
+
+```bash
+gh workflow run ci-basico.yml
+gh workflow run sast.yml
+gh workflow run sca.yml
+gh workflow run container.yml
+gh workflow run dast.yml
+gh workflow run iac-scan.yml
+
+gh run list --limit 10          # acompanhar
+gh pr checks --watch            # checks do PR atual
+```
+
+O relatório do ZAP fica como artefato da execução (`zap-baseline-report`).
+
+## Proteção da branch main
+
+- **Pull Request obrigatório.** Ninguém faz push direto na `main`, nem
+  administradores.
+- **Required status checks:** os 8 jobs da tabela acima, com a branch
+  atualizada em relação à `main`.
+- **CODEOWNERS** (`.github/CODEOWNERS`): todo PR precisa da aprovação de pelo
+  menos 1 code owner. Aprovações antigas caem quando entra commit novo.
+- Force push e exclusão da `main` bloqueados.
+
+> Se um job for renomeado, o nome do required check precisa ser atualizado na
+> proteção. Caso contrário, a `main` fica esperando um check que não existe
+> mais.
 
 ## Como executar localmente
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+pip install --require-hashes -r requirements.txt
 
-# Segredos vem do ambiente - nunca do codigo
+# Segredos vêm do ambiente, nunca do código
 export TASKFLOW_SECRET_KEY="$(openssl rand -hex 32)"
 export TASKFLOW_ADMIN_PASSWORD="<escolha-uma-senha>"
 export TASKFLOW_ALUNO_PASSWORD="<escolha-outra-senha>"
-python app.py
+python app.py                      # servidor de desenvolvimento, só local
 ```
 
-A aplicação sobe em `http://localhost:5000`. Na primeira execução, os
-usuários `admin` e `aluno` são criados no banco SQLite (`taskflow.db`)
-com as senhas definidas nas variáveis acima, armazenadas apenas como
-hash. Se uma das variáveis não estiver definida, aquele usuário não é
-criado. Sem `TASKFLOW_SECRET_KEY` a aplicação não sobe.
+A aplicação sobe em `http://127.0.0.1:5000`. Na primeira execução, os
+usuários `admin` e `aluno` são criados no SQLite com as senhas acima,
+armazenadas **apenas como hash**. Um usuário cuja variável não estiver
+definida não é criado. Sem `TASKFLOW_SECRET_KEY`, a aplicação não sobe.
 
-## Como executar com Docker
+| Variável | Uso | Padrão |
+|---|---|---|
+| `TASKFLOW_SECRET_KEY` | Chave de sessão do Flask (**obrigatória**) | — |
+| `TASKFLOW_ADMIN_PASSWORD` / `TASKFLOW_ALUNO_PASSWORD` | Senhas iniciais | usuário não criado |
+| `FLASK_DEBUG` | Debug do Flask, **só em desenvolvimento** | `false` |
+| `FLASK_RUN_HOST` | Interface do servidor de desenvolvimento | `127.0.0.1` |
+| `TASKFLOW_DATABASE` | Caminho do SQLite | `taskflow.db` |
+| `TASKFLOW_LOG_DIR` | Diretório dos logs JSON | `logs` |
+| `TASKFLOW_SECURE_COOKIE` | Cookie só via HTTPS | `false` |
+
+Lint antes de abrir o PR:
 
 ```bash
-cd app-exemplo
-docker build -t taskflow:vuln .
-docker run -p 5000:5000 \
-  -e TASKFLOW_SECRET_KEY="$(openssl rand -hex 32)" \
-  -e TASKFLOW_ADMIN_PASSWORD="<escolha-uma-senha>" \
-  -e TASKFLOW_ALUNO_PASSWORD="<escolha-outra-senha>" \
-  taskflow:vuln
+pip install ruff==0.17.4
+ruff check . && ruff format --check .
 ```
 
-## Estrutura
+## Como executar com Docker (hardened)
 
-```
-app-exemplo/
-├── app.py              # Aplicação Flask (versão vulnerável, linha de base)
-├── requirements.txt    # Dependências com CVEs conhecidas (uso proposital)
-├── Dockerfile           # Dockerfile inseguro (uso no Módulo 2 - Hardening)
-└── README.md            # Este arquivo
+```bash
+docker build -t taskflow:local .
+./scripts/docker-run-seguro.sh taskflow:local
 ```
 
-Cada módulo cria, dentro da sua própria pasta `codigo/`, uma cópia ou um
-patch desta aplicação demonstrando o "antes" (vulnerável) e o "depois"
-(corrigido) referente ao tema daquele encontro.
+O script gera os segredos na hora e sobe o container com as flags de runtime
+seguras:
 
-## Teste de proteção do branch
+| Flag | Por quê |
+|---|---|
+| `--read-only` | Raiz somente leitura: um invasor não consegue alterar o código |
+| `--tmpfs /data` e `--tmpfs /tmp` (`uid=10001`, `noexec`, `nosuid`) | Únicos lugares graváveis (banco, logs, heartbeat do gunicorn) |
+| `--cap-drop=ALL` | Remove todas as capabilities do Linux |
+| `--security-opt=no-new-privileges` | Impede escalada de privilégio (setuid) |
+| `--memory=256m --cpus=0.5 --pids-limit=100` | Limita abuso de recursos (DoS) |
+| `-p 127.0.0.1:5000:5000` | Porta acessível só pelo próprio host |
 
-Mudança de teste.
+No fim, o script imprime as evidências: flags aplicadas, `uid=10001` e uma
+tentativa de escrita recusada com `Read-only file system`.
 
-Teste 3 - A hora de morrer
+## Vulnerabilidades corrigidas
+
+| Vulnerabilidade (versão original) | Correção | OWASP Top 10 2021 |
+|---|---|---|
+| SQL Injection no login e na busca `q` | Consultas parametrizadas | A03 Injection |
+| XSS armazenado e refletido (incluindo `q` e a mensagem de erro do login) | Templates Jinja2 com autoescape, sem `\| safe` | A03 Injection |
+| `SECRET_KEY` hardcoded | Variável `TASKFLOW_SECRET_KEY`, sem fallback | A02 Cryptographic Failures |
+| Senhas em texto puro | Hash (Werkzeug/scrypt), senhas iniciais vindas do ambiente | A02 / A07 |
+| `/debug/info` expondo o ambiente e a chave | Rota removida | A05 Security Misconfiguration |
+| `debug=True` fixo | `FLASK_DEBUG`, desligado por padrão | A05 |
+| Sem headers de segurança e sem CSRF | CSP sem `unsafe-inline`, `X-Frame-Options`, `nosniff`, `Referrer-Policy`, cookie `HttpOnly` + `SameSite`, token CSRF em todo POST | A05 / A01 |
+| Dependências com CVEs | Versões atualizadas, travadas com hash | A06 Vulnerable Components |
+| Dockerfile inseguro (FALHAS 1 a 6) | Ver `Dockerfile`: digest fixo, não-root, `--require-hashes`, sem segredos, gunicorn, debug desligado | A05 / A08 |
+
+## Decisões técnicas e trade-offs
+
+- **`iac-scan.yml` sem filtro `paths:`.** Com o filtro, o scan só rodaria
+  quando um `.tf` mudasse. Como ele é required check, PRs que não mexem em
+  infraestrutura ficariam travados esperando um check que nunca roda. O scan
+  leva segundos, então roda em todo PR. O Checkov também olha o `Dockerfile`
+  e os workflows, que também são infraestrutura como código.
+- **`apt-get upgrade` no Dockerfile.** Mesmo a versão mais recente da
+  `python:3.12-slim` saiu com 2 CVEs HIGH no `zlib1g` já corrigidas no Debian
+  (CVE-2026-76844 e CVE-2026-85091, em 12/11/2026). Aplicar as atualizações
+  de segurança no build zera os achados. O custo: o build deixa de ser 100%
+  reprodutível, porque o resultado do upgrade depende do dia.
+- **`ignore-unfixed` no Trivy image.** CVEs sem correção publicada não são
+  acionáveis (não há versão para onde ir) e travariam todo PR. Elas continuam
+  visíveis num `trivy image` sem filtro.
+- **Dependências travadas com hash** (`requirements.in` → `pip-compile
+  --generate-hashes` → `requirements.txt`). O Docker e o CI instalam com
+  `--require-hashes`: um pacote adulterado no PyPI quebra o build em vez de
+  entrar na imagem. O Dependabot entende esse formato e atualiza os dois
+  arquivos.
+- **`.zap/rules.tsv`.** Só alertas informativos ou que não se aplicam foram
+  rebaixados para IGNORE, cada um com justificativa na própria linha. Qualquer
+  outro alerta reprova o `zap-baseline` (`fail_action: true`, sem
+  `continue-on-error`).
+- **Gitleaks sem allowlist.** A linha de base foi commitada já sem os
+  segredos didáticos, então o histórico não tem nada a suprimir. Nenhuma regra
+  foi desligada.
+- **SQLite em vez de Postgres.** Mantém a aplicação simples. No container, o
+  banco fica em `/data` (tmpfs ou volume) para conviver com `--read-only`.
+
+## Estrutura do repositório
+
+```
+.
+├── .github/
+│   ├── CODEOWNERS              # aprovação obrigatória de 1 code owner
+│   ├── dependabot.yml          # pip, docker, github-actions
+│   └── workflows/              # ci-basico, sast, sca, container, dast, iac-scan
+├── .zap/rules.tsv              # regras do ZAP com justificativa
+├── app.py                      # aplicação Flask corrigida + logging JSON
+├── templates/                  # login.html, tasks.html, new_task.html
+├── requirements.in             # dependências diretas (editar aqui)
+├── requirements.txt            # gerado pelo pip-compile, com hashes
+├── pyproject.toml              # configuração do ruff
+├── gunicorn.conf.py            # servidor WSGI de produção
+├── Dockerfile                  # imagem hardened (FALHAS 1 a 6 corrigidas)
+├── .dockerignore
+└── scripts/docker-run-seguro.sh
+```
+
+> Nunca versione `.env`, `*.db` ou logs (já estão no `.gitignore`). Segredos
+> do CI ficam em **Settings → Secrets and variables → Actions**.

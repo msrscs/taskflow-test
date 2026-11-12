@@ -1,71 +1,88 @@
-# =============================================================================
-# Workflow de exemplo: SAST (Semgrep) + Secret Scanning (Gitleaks)
+# SAST (Semgrep) + Secret Scanning (Gitleaks) - Modulo 3.
 #
-# COMO USAR:
-#   Copie este arquivo para ".github/workflows/sast.yml" na raiz do seu
-#   repositório (o GitHub só reconhece workflows dentro dessa pasta exata).
+# Os dois jobs sao gates: qualquer achado falha o job e, com o required
+# check na protecao da main, bloqueia o merge do PR. Nada de
+# continue-on-error, --exit-zero ou "# nosemgrep" sem justificativa.
 #
-# O QUE ELE FAZ:
-#   1. Roda o Semgrep contra o código-fonte Python usando rulesets públicos
-#      focados em Python/Flask/segurança geral.
-#   2. Roda o Gitleaks contra todo o histórico do repositório para detectar
-#      segredos (chaves, tokens, senhas) commitados.
-#   3. Falha o job (exit code != 0) se qualquer uma das ferramentas encontrar
-#      um problema, o que bloqueia o merge do Pull Request se o repositório
-#      tiver "branch protection" configurada para exigir o check verde.
+# Padronizacao aplicada:
+#   - permissions: contents: read no topo (menor privilegio).
+#   - Actions pinadas por SHA, com a versao no comentario.
+#   - Semgrep com versao fixa (antes era "pip install semgrep", que pega
+#     qualquer versao nova e pode mudar o resultado sem mudanca no codigo).
+#   - Gitleaks atualizado para v8.30.1 e com verificacao do SHA-256 do
+#     binario baixado (antes o tar.gz era executado sem checar integridade).
+#   - Os dois jobs em ubuntu-24.04 (o gitleaks ainda estava em ubuntu-latest).
+#   - Gatilhos: PR (o gate), push na main e manual. Antes rodava em push de
+#     QUALQUER branch + PR, o que duplicava as execucoes de cada PR.
 #
-# Este é o "caminho simples" descrito no Encontro 6: falhar o job e ler o
-# log do próprio GitHub Actions. Uma evolução possível (mencionada na aula,
-# não implementada aqui para não aumentar a complexidade) é publicar os
-# achados em formato SARIF na aba "Security > Code Scanning" do GitHub.
-# =============================================================================
+# Os nomes dos jobs foram mantidos (sao os nomes dos required checks).
 
 name: SAST e Secret Scanning
 
 on:
-  push:
-    branches: ["**"]
   pull_request:
-    branches: ["**"]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   semgrep:
     name: SAST - Semgrep
-    # runs-on: ubuntu-latest
-    # *** Substituação 'ubuntu-latest' por uma versão estática LTS (como 24.04)
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
-      - name: Checkout do código
-        uses: actions/checkout@v4
+      - name: Checkout do codigo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Instalar Semgrep
-        run: pip install semgrep
+      - name: Configurar Python 3.12
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
 
-      - name: Rodar Semgrep (rulesets Python + Flask + auditoria de segurança)
+      - name: Instalar Semgrep (versao fixa)
+        run: pip install semgrep==1.185.0
+
+      - name: Rodar Semgrep (rulesets Python + Flask + auditoria de seguranca)
+        # --error: exit code != 0 quando ha achados -> job vermelho.
         run: |
           semgrep scan \
             --config=p/python \
             --config=p/flask \
             --config=p/security-audit \
             --error
-        # --error faz o Semgrep retornar exit code != 0 quando há findings,
-        # o que automaticamente marca este step (e o job) como "failed".
 
   gitleaks:
     name: Secret Scanning - Gitleaks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GITLEAKS_VERSION: "8.30.1"
+      # SHA-256 oficial de gitleaks_8.30.1_linux_x64.tar.gz, copiado de
+      # gitleaks_8.30.1_checksums.txt da release. Ao atualizar a versao,
+      # atualize tambem este valor.
+      GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
     steps:
-      - name: Checkout do código (histórico completo)
-        uses: actions/checkout@v4
+      - name: Checkout do codigo (historico completo)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # Exigido pelo PDF: o Gitleaks precisa de todo o historico para
+          # achar segredos em commits antigos, nao so no ultimo.
           fetch-depth: 0
 
-      - name: Instalar Gitleaks
+      - name: Instalar Gitleaks (com verificacao de integridade)
         run: |
-          wget -qO- https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz \
-            | tar -xz gitleaks
+          arquivo="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o "$arquivo" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${arquivo}"
+          # Falha o job se o arquivo baixado nao for exatamente o publicado.
+          echo "${GITLEAKS_SHA256}  ${arquivo}" | sha256sum --check --strict
+          tar -xzf "$arquivo" gitleaks
           sudo mv gitleaks /usr/local/bin/
+          gitleaks version
 
-      - name: Rodar Gitleaks (histórico completo)
-        run: |
-          gitleaks detect --source .
+      - name: Rodar Gitleaks (historico completo)
+        # "git" e o subcomando atual (o antigo "detect" esta deprecado).
+        run: gitleaks git --redact -v .
