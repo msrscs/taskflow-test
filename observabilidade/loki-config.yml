@@ -1,0 +1,57 @@
+# Configuracao do Loki (Modulo 6): modo "monolitico" (um processo so),
+# armazenamento em disco local (volume loki_data). Adequado para o lab;
+# em producao o armazenamento seria um object store (S3, GCS...).
+
+# Sem multi-tenancy: o Loki so e acessivel pela rede interna
+# "observabilidade" (sem porta publicada no host), por Grafana e Promtail.
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  log_level: warn
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2026-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  # Retencao de 7 dias: suficiente para investigar um incidente do lab
+  # sem crescer o volume indefinidamente.
+  retention_period: 168h
+  # Aceita linhas com ate 1 hora de atraso (ex.: reinicio do Promtail).
+  reject_old_samples: true
+  reject_old_samples_max_age: 1h
+
+compactor:
+  working_directory: /loki/compactor
+  retention_enabled: true
+  delete_request_store: filesystem
+
+ruler:
+  storage:
+    type: local
+    local:
+      directory: /loki/rules
+
+# Nao envia estatisticas de uso para a Grafana Labs.
+analytics:
+  reporting_enabled: false

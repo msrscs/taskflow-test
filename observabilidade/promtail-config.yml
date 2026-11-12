@@ -1,0 +1,51 @@
+# Configuracao do Promtail (Modulo 6): le o arquivo de log JSON da TaskFlow
+# e envia cada linha para o Loki.
+#
+# O arquivo vem do volume "app_data" do docker-compose.yml (o mesmo em que
+# a app grava /data/logs/taskflow.log), montado SOMENTE LEITURA aqui em
+# /var/log/taskflow. O Promtail nao consegue alterar nem apagar os logs.
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+  log_level: warn
+
+# "Ponteiro" de ate onde ja leu cada arquivo. Fica no tmpfs /tmp (a raiz do
+# container e somente leitura). Se o Promtail reiniciar, ele rele o arquivo,
+# mas nao ha contagem duplicada: o Loki descarta linhas repetidas (mesmo
+# stream, mesmo timestamp e mesmo conteudo; o timestamp vem do proprio
+# evento, ver o estagio "timestamp" abaixo).
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: taskflow
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: taskflow
+          __path__: /var/log/taskflow/logs/*.log
+
+    pipeline_stages:
+      # Cada linha ja e um objeto JSON (JsonFormatter do app.py).
+      - json:
+          expressions:
+            level: level
+            event: event
+            timestamp: timestamp
+      # Usa o horario em que o EVENTO aconteceu (gravado pela app), e nao
+      # o horario em que o Promtail leu a linha.
+      - timestamp:
+          source: timestamp
+          format: RFC3339Nano
+      # Viram labels so campos de BAIXA cardinalidade (poucos valores
+      # distintos), o que deixa as consultas rapidas. Campos como ip,
+      # username e request_id NAO viram label (seriam milhares de series
+      # no Loki); eles sao filtrados na consulta com "| json".
+      - labels:
+          level:
+          event:

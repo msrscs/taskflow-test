@@ -1,0 +1,6 @@
+# Estado da regra de alerta no Grafana (API /api/prometheus/grafana/api/v1/rules), apos a simulacao
+regra: Forca bruta no login (> 10 falhas/IP em 5 min)
+query: sum by (ip) (count_over_time({job="taskflow", event="login_attempt"} | json | result="failure" [5m]))
+estado: firing | saude: ok
+  instancia ip=172.22.0.4 estado=Alerting desde=2026-11-12T15:05:50Z
+  instancia ip=172.22.0.1 estado=Normal desde=2026-11-12T15:05:50Z

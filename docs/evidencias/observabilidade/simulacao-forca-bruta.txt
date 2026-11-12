@@ -1,0 +1,16 @@
+# Simulacao de forca bruta - 12/11/2026 (stack local: docker compose --profile observabilidade)
+# Usuario legitimo: host (IP visto pela app: 172.22.0.1, gateway da rede frontend)
+#   2 senhas erradas + 1 login correto, 15:05:22-15:05:23Z
+# Atacante: container curlimages/curl na rede taskflow_frontend (IP 172.22.0.4)
+#   docker run --rm --network taskflow_frontend -v "$PWD/scripts":/s:ro curlimages/curl:8.17.0 sh /s/brute_force.sh http://app:5000 admin 50 0.2
+
+Unable to find image 'curlimages/curl:8.17.0' locally
+8.17.0: Pulling from curlimages/curl
+bd9ddc54bea9: Pulling fs layer
+Fim: 2026-11-12T15:05:42Z  falhas=50  sucessos=0
+
+## Linha do tempo extraida do Loki (eventos login_attempt)
+ip=172.22.0.1 result=failure n=2 primeiro=2026-11-12T15:05:22.914665+00:00 ultimo=2026-11-12T15:05:23.090510+00:00 usuarios=['admin']
+ip=172.22.0.1 result=success n=1 primeiro=2026-11-12T15:05:23.219841+00:00 ultimo=2026-11-12T15:05:23.219841+00:00 usuarios=['admin']
+ip=172.22.0.4 result=failure n=50 primeiro=2026-11-12T15:05:27.002023+00:00 ultimo=2026-11-12T15:05:41.989994+00:00 usuarios=['admin']
+exemplo request_id do ataque: 5510bd72-4467-4600-8766-644ae4dc9d34 | campos do evento: ['event', 'ip', 'level', 'logger', 'message', 'request_id', 'result', 'timestamp', 'username']

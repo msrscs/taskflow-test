@@ -383,8 +383,16 @@ def logar_fim_da_requisicao(response):
             "status_code": response.status_code,
             "duration_ms": duracao_ms,
             "user": session.get("username"),
+            # IP de origem tambem no evento de toda requisicao (nao so no
+            # login): permite ver no Grafana o volume de trafego por IP.
+            "ip": request.remote_addr,
         },
     )
+    # Devolve o request_id ao cliente: quem reporta um erro (ou o time de
+    # resposta a incidente) informa esse valor e acha no Loki todos os
+    # eventos daquela requisicao: {job="taskflow"} | json | request_id="..."
+    # E um UUID aleatorio, sem nenhum dado interno.
+    response.headers["X-Request-ID"] = g.get("request_id", "")
     return response
 
 
