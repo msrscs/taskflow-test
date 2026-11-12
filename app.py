@@ -1,65 +1,71 @@
 """
-TaskFlow - Versao INSTRUMENTADA com logging estruturado (Modulo 6).
+TaskFlow - versao corrigida da esteira DevSecOps (Modulos 1 a 6).
 
-Esta e a mesma aplicacao TaskFlow usada no restante do curso
-(ver app-exemplo/app.py), com uma camada de observabilidade adicionada
-por cima. As vulnerabilidades propositais da versao original (SQL
-Injection, XSS, senha em texto puro, segredo hardcoded, endpoint de
-debug exposto) foram MANTIDAS de proposito - o objetivo deste modulo
-NAO e corrigi-las, e sim demonstrar como enxergar sintomas desses
-problemas (e de tentativas de exploracao) atraves de logs estruturados.
+Aplicacao Flask de lista de tarefas usada na disciplina. Partindo da
+versao vulneravel original (app-exemplo/app.py), esta versao corrige as
+vulnerabilidades de codigo e mantem a camada de observabilidade do
+Modulo 6.
 
-O que foi adicionado nesta versao:
-  1. Configuracao de logging em formato JSON (um objeto JSON por linha,
-     tambem chamado de "JSON Lines" ou NDJSON), usando APENAS a
-     biblioteca padrao `logging` do Python + um Formatter customizado.
+Correcoes de seguranca aplicadas:
+  1. SQL Injection (login e busca "q")   -> consultas parametrizadas
+  2. XSS armazenado e refletido          -> templates Jinja2 com autoescape
+                                            (templates/, sem "| safe"),
+                                            incluindo o parametro "q" e a
+                                            mensagem de erro do login
+  3. SECRET_KEY hardcoded                -> variavel TASKFLOW_SECRET_KEY,
+                                            sem fallback
+  4. Senhas em texto puro                -> hash (Werkzeug) e senhas
+                                            iniciais lidas do ambiente
+  5. Endpoint /debug/info exposto        -> removido
+  6. debug=True fixo                     -> FLASK_DEBUG, desligado por padrao
+  7. app.run em 0.0.0.0 fixo             -> FLASK_RUN_HOST, padrao 127.0.0.1
 
-     Por que nao usamos a lib `python-json-logger` aqui?
-     Ela e uma otima opcao de mercado (mais concisa, com suporte a
-     campos extra "de fabrica"), e fica registrada como alternativa em
-     `requirements-observabilidade.txt` (comentada) para quem quiser
-     experimentar. Optamos por escrever nosso proprio Formatter neste
-     exemplo para os alunos verem exatamente o que acontece por baixo
-     dos panos: como cada registro de log vira um dicionario e depois
-     um JSON - isso e didaticamente mais valioso no primeiro contato
-     com logging estruturado do que importar uma lib pronta.
+Observabilidade (Modulo 6):
+  - Logs em JSON (um objeto por linha / NDJSON) com um Formatter proprio
+    sobre a biblioteca padrao `logging`.
+  - `request_id` (UUID v4) gerado no `before_request` e anexado a todos os
+    logs da requisicao, para correlacao no Grafana/Loki.
+  - Eventos: http_request, login_attempt (sucesso/falha), logout,
+    task_created e tasks_list_accessed.
+  - Nada sensivel e logado: nunca a senha, o cookie ou o token; da tarefa
+    so vai o tamanho da descricao.
+  - Saida em stdout e no arquivo logs/taskflow.log (lido pelo Promtail).
 
-  2. Um `request_id` (UUID v4) gerado a cada requisicao HTTP, no hook
-     `before_request` do Flask, e anexado a TODOS os logs emitidos
-     durante aquela requisicao. Isso permite correlacionar, em uma
-     stack de observabilidade (Grafana/Loki), todos os eventos de log
-     pertencentes a uma unica jornada de requisicao - essencial para
-     investigar incidentes.
+Variaveis de ambiente:
+  TASKFLOW_SECRET_KEY      obrigatoria - chave de sessao do Flask
+  TASKFLOW_ADMIN_PASSWORD  senha inicial do usuario "admin" (opcional)
+  TASKFLOW_ALUNO_PASSWORD  senha inicial do usuario "aluno" (opcional)
+  FLASK_DEBUG              "true" so em desenvolvimento (padrao: false)
+  FLASK_RUN_HOST           interface de escuta (padrao: 127.0.0.1)
 
-  3. Eventos de negocio/seguranca logados explicitamente:
-       - login_attempt (sucesso ou falha, SEM logar a senha)
-       - task_created
-       - tasks_list_accessed
-
-  4. Cuidado deliberado para NAO logar dados sensiveis em claro:
-     a senha nunca aparece nos logs; quando precisamos de algum tipo
-     de "pista" sobre um dado sensivel (ex.: para debugar duplicidade
-     de usuario), preferimos logar um hash curto em vez do valor.
-
-Para rodar:
-    pip install -r requirements-observabilidade.txt
-    python app_instrumented.py
-
-A aplicacao grava logs em dois lugares ao mesmo tempo:
-  - stdout (para quem quiser rodar via `docker compose logs`)
-  - arquivo `logs/taskflow.log` (para o Promtail ler e enviar ao Loki)
+Para rodar localmente:
+    pip install -r requirements.txt
+    export TASKFLOW_SECRET_KEY="$(openssl rand -hex 32)"
+    export TASKFLOW_ADMIN_PASSWORD="<senha>"
+    python app.py
 """
 
+import hmac
 import json
 import logging
 import os
+import secrets
 import sqlite3
 import time
 import uuid
 from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
 
-from flask import Flask, g, redirect, request, session, url_for
+from flask import (
+    Flask,
+    abort,
+    g,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 from werkzeug.security import check_password_hash, generate_password_hash
 
 # ---------------------------------------------------------------------------
@@ -151,6 +157,15 @@ if not _secret_key:
     )
 app.config["SECRET_KEY"] = _secret_key
 
+# Cookie de sessao: inacessivel ao JavaScript e nao enviado em requisicoes
+# cross-site (defesa extra contra roubo de sessao e CSRF). Em producao com
+# HTTPS, defina tambem TASKFLOW_SECURE_COOKIE=true.
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = (
+    os.environ.get("TASKFLOW_SECURE_COOKIE", "false").lower() == "true"
+)
+
 DATABASE = "taskflow.db"
 
 
@@ -227,6 +242,60 @@ def init_db():
 def gerar_request_id():
     g.request_id = str(uuid.uuid4())
     g.start_time = time.time()
+
+
+# ---------------------------------------------------------------------------
+# Protecao CSRF (sem dependencia extra): um token aleatorio por sessao e
+# incluido como campo oculto "csrf_token" em todo formulario POST e
+# conferido aqui antes de qualquer view. Detectado pelo ZAP (regra 10202).
+# ---------------------------------------------------------------------------
+def csrf_token():
+    if "_csrf_token" not in session:
+        session["_csrf_token"] = secrets.token_urlsafe(32)
+    return session["_csrf_token"]
+
+
+app.jinja_env.globals["csrf_token"] = csrf_token
+
+
+@app.before_request
+def validar_csrf():
+    if request.method != "POST":
+        return
+    esperado = session.get("_csrf_token")
+    recebido = request.form.get("csrf_token", "")
+    if not esperado or not hmac.compare_digest(esperado, recebido):
+        logger.warning(
+            "token CSRF ausente ou invalido",
+            extra={
+                "event": "csrf_rejected",
+                "path": request.path,
+                "ip": request.remote_addr,
+                "request_id": g.get("request_id"),
+            },
+        )
+        abort(400)
+
+
+# ---------------------------------------------------------------------------
+# Cabecalhos de seguranca em todas as respostas (achados do ZAP Baseline:
+# 10020, 10021, 10036, 10038, 10063 e 90004).
+# ---------------------------------------------------------------------------
+@app.after_request
+def adicionar_cabecalhos_de_seguranca(response):
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "frame-ancestors 'none'; form-action 'self'; base-uri 'self'; "
+        "object-src 'none'"
+    )
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "same-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+    response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+    response.headers["Cross-Origin-Embedder-Policy"] = "require-corp"
+    return response
 
 
 @app.after_request
@@ -317,15 +386,9 @@ def login():
             },
         )
 
-    return f"""
-    <h1>TaskFlow - Login</h1>
-    <form method="post">
-        Usuario: <input type="text" name="username"><br>
-        Senha: <input type="password" name="password"><br>
-        <input type="submit" value="Entrar">
-    </form>
-    <p style="color:red">{error or ""}</p>
-    """
+    # Template Jinja2 com autoescape: a mensagem de erro nunca e
+    # interpretada como HTML (fecha o sink de XSS refletido no login).
+    return render_template("login.html", error=error)
 
 
 @app.route("/logout")
@@ -351,14 +414,12 @@ def tasks():
     db = get_db()
 
     if search:
-        query = (
-            "SELECT * FROM tasks WHERE user_id = "
-            + str(session["user_id"])
-            + " AND title LIKE '%"
-            + search
-            + "%'"
-        )
-        rows = db.execute(query).fetchall()
+        # Consulta parametrizada: o termo de busca vai como parametro, nunca
+        # concatenado na string SQL (evita SQL Injection pelo parametro "q").
+        rows = db.execute(
+            "SELECT * FROM tasks WHERE user_id = ? AND title LIKE ?",
+            (session["user_id"], f"%{search}%"),
+        ).fetchall()
     else:
         rows = db.execute(
             "SELECT * FROM tasks WHERE user_id = ?", (session["user_id"],)
@@ -379,25 +440,15 @@ def tasks():
         },
     )
 
-    items = ""
-    for row in rows:
-        items += f"""
-        <li>
-            <b>{row['title']}</b> - {row['description']}
-            {'(feita)' if row['done'] else ''}
-        </li>
-        """
-
-    return f"""
-    <h1>Minhas tarefas ({session['username']})</h1>
-    <form method="get">
-        <input type="text" name="q" placeholder="buscar tarefa">
-        <input type="submit" value="Buscar">
-    </form>
-    <ul>{items}</ul>
-    <a href="{url_for('new_task')}">Nova tarefa</a> |
-    <a href="{url_for('logout')}">Sair</a>
-    """
+    # Template Jinja2 com autoescape (sem "| safe"): titulo, descricao,
+    # username e o termo de busca "q" sao escapados automaticamente,
+    # fechando o XSS armazenado e o refletido pelo parametro de busca.
+    return render_template(
+        "tasks.html",
+        tasks=rows,
+        username=session["username"],
+        search=search,
+    )
 
 
 @app.route("/tasks/new", methods=["GET", "POST"])
@@ -432,39 +483,13 @@ def new_task():
         )
         return redirect(url_for("tasks"))
 
-    return """
-    <h1>Nova tarefa</h1>
-    <form method="post">
-        Titulo: <input type="text" name="title"><br>
-        Descricao: <textarea name="description"></textarea><br>
-        <input type="submit" value="Salvar">
-    </form>
-    """
+    return render_template("new_task.html")
 
 
-@app.route("/debug/info")
-def debug_info():
-    # Vulnerabilidade mantida de proposito - endpoint de debug exposto
-    # sem autenticacao (ver app-exemplo/app.py). Logamos o acesso a ele
-    # com nivel WARNING, pois e um recurso sensivel que nunca deveria
-    # ser publico.
-    import platform
-    import sys
-
-    logger.warning(
-        "acesso ao endpoint de debug",
-        extra={
-            "event": "sensitive_endpoint_accessed",
-            "path": "/debug/info",
-            "ip": request.remote_addr,
-            "request_id": g.get("request_id"),
-        },
-    )
-
-    return {
-        "python_version": sys.version,
-        "platform": platform.platform(),
-    }
+# O endpoint /debug/info foi REMOVIDO (Modulo 4): ele expunha, sem
+# autenticacao, detalhes do ambiente (e, na versao original, a SECRET_KEY).
+# Se for preciso um health check, crie uma rota que devolva apenas
+# {"status": "ok"}, sem nenhum dado interno.
 
 
 if __name__ == "__main__":
@@ -474,4 +499,18 @@ if __name__ == "__main__":
         "aplicacao TaskFlow (instrumentada) iniciando",
         extra={"event": "app_startup"},
     )
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    # debug controlado por variavel de ambiente e DESLIGADO por padrao: o
+    # debugger interativo do Werkzeug permite executar codigo no servidor.
+    #   export FLASK_DEBUG=true   # apenas em desenvolvimento local
+    debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() in ("1", "true", "yes")
+    # Host padrao 127.0.0.1 (so a propria maquina). Dentro de um container
+    # e preciso escutar em todas as interfaces: defina FLASK_RUN_HOST no
+    # Dockerfile/compose. Em producao, use gunicorn em vez de app.run().
+    host = os.environ.get("FLASK_RUN_HOST", "127.0.0.1")
+    # O servidor de desenvolvimento do Werkzeug sempre anuncia a propria
+    # versao e a do Python no header "Server" (ZAP 10036). Escondemos.
+    from werkzeug.serving import WSGIRequestHandler
+
+    WSGIRequestHandler.server_version = "TaskFlow"
+    WSGIRequestHandler.sys_version = ""
+    app.run(host=host, port=5000, debug=debug_mode)
