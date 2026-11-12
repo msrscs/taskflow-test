@@ -10,11 +10,11 @@
 #     (github_actions), nao so Terraform: o Dockerfile tambem e IaC.
 #   - Actions pinadas por SHA (antes @master, que executa qualquer commit
 #     novo do repositorio da action) e versao do Trivy fixa.
-#   - permissions: contents: read no topo; ubuntu-24.04 nos dois jobs.
-#   - Nomes de job curtos e estaveis (checkov / trivy-config), que serao os
-#     required checks na protecao da main.
+#   - permissions: contents: read no topo; ubuntu-24.04 em todos os jobs.
+#   - Nomes de job curtos e estaveis (checkov / trivy-config /
+#     terraform-validate), que sao os required checks na protecao da main.
 #
-# Todo "#checkov:skip=CKV_...:<motivo>" deve ficar no proprio recurso, com
+# Todo "#checkov:skip=CKV_...:<motivo>" e "#trivy:ignore" deve ficar no proprio recurso, com
 # a justificativa escrita (exigencia do PDF).
 
 name: IaC Security Scan
@@ -67,3 +67,34 @@ jobs:
           # Gate so para severidades relevantes.
           severity: HIGH,CRITICAL
           exit-code: "1"
+
+  # Exigencia do PDF: "terraform validate passando". Valida sintaxe, tipos e
+  # referencias do infra/ sem credenciais AWS e sem criar nada
+  # (-backend=false). fmt -check reprova codigo fora do padrao do Terraform.
+  terraform-validate:
+    name: terraform-validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - name: Checkout do codigo
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Instalar Terraform (versao fixa)
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: 1.17.2
+          terraform_wrapper: false
+
+      - name: terraform init (sem backend, provider conferido pelo lock)
+        # -lockfile=readonly: falha se o provider baixado nao bater com o
+        # hash registrado no .terraform.lock.hcl versionado.
+        run: terraform init -backend=false -input=false -lockfile=readonly
+
+      - name: terraform fmt -check
+        run: terraform fmt -check -recursive
+
+      - name: terraform validate
+        run: terraform validate

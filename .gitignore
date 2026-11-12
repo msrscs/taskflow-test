@@ -30,3 +30,8 @@ codigo/
 
 # Logs da aplicacao
 logs/
+
+# Terraform: variaveis com dados reais de rede/conta e logs de crash
+*.tfvars
+!*.tfvars.example
+crash.log

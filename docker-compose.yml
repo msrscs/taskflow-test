@@ -1,0 +1,144 @@
+# =============================================================================
+# docker-compose.yml SEGURO da TaskFlow (Modulo 5 - Seguranca em IaC).
+#
+# Sobe a aplicacao (imagem hardened do Dockerfile da raiz) + PostgreSQL.
+#
+# Uso:
+#   cp .env.example .env          # e preencha com valores aleatorios (ver .env.example)
+#   docker compose up -d --build
+#   docker compose ps             # os dois servicos devem ficar "healthy"
+#
+# Itens exigidos pelo PDF e onde estao:
+#   - redes frontend/backend isoladas ......... "networks" (backend internal)
+#   - banco sem porta exposta ao host ......... servico "db" SEM "ports:"
+#   - segredos via .env (nao versionado) ...... ${VAR:?} + .env.example
+#   - read_only ............................... read_only: true nos dois
+#   - healthcheck ............................. nos dois servicos
+#   - limites de CPU e memoria ................ deploy.resources.limits
+#   - no-new-privileges ....................... security_opt nos dois
+# Extras: cap_drop ALL, limite de processos (pids), imagens fixadas por digest, usuario
+# nao-root tambem no banco e porta da app so no localhost do host.
+#
+# Sintaxe ${VAR:?mensagem}: se a variavel nao estiver no .env, o Compose
+# ABORTA com a mensagem, em vez de subir com valor vazio (falhar alto).
+# =============================================================================
+
+name: taskflow
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: taskflow:compose
+    # Unica porta publicada em todo o arquivo, e so no localhost do host.
+    # Em producao ficaria atras de um proxy reverso com TLS.
+    ports:
+      - "127.0.0.1:5000:5000"
+    environment:
+      # Nenhum segredo escrito aqui: tudo vem do .env por interpolacao.
+      TASKFLOW_SECRET_KEY: ${TASKFLOW_SECRET_KEY:?defina TASKFLOW_SECRET_KEY no .env}
+      TASKFLOW_ADMIN_PASSWORD: ${TASKFLOW_ADMIN_PASSWORD:-}
+      TASKFLOW_ALUNO_PASSWORD: ${TASKFLOW_ALUNO_PASSWORD:-}
+      # Com DATABASE_URL o app.py usa o PostgreSQL em vez do SQLite.
+      # "db" e o nome do servico, resolvido pelo DNS interno da rede backend.
+      DATABASE_URL: postgresql://${POSTGRES_USER:?defina POSTGRES_USER no .env}:${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}@db:5432/${POSTGRES_DB:?defina POSTGRES_DB no .env}
+      FLASK_DEBUG: "false"
+    # frontend: rede por onde a porta e publicada.
+    # backend: rede interna, a unica por onde se chega ao banco.
+    networks:
+      - frontend
+      - backend
+    # Raiz somente leitura: o codigo nao pode ser alterado em execucao.
+    # Graváveis apenas: /data (volume com os logs JSON, que o Promtail vai
+    # ler no Modulo 6) e /tmp (heartbeat dos workers do gunicorn).
+    read_only: true
+    volumes:
+      - app_data:/data
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m,uid=10001,gid=10001,mode=0700
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+          pids: 100
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/login', timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    # So sobe depois que o banco responder ao healthcheck (o gunicorn cria
+    # as tabelas no on_starting e precisa do banco pronto).
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    # Tag fixa + digest (mesmo principio da FALHA 1 do Dockerfile).
+    image: postgres:17-alpine@sha256:e5d2edd28b1f8d40a0a6c0c9cdc545b19b56a0d5d88f94bc11a97d970d4700d0
+    # SEM "ports:" -> o banco NAO e acessivel a partir do host nem da
+    # internet; so de dentro da rede backend (ou seja, so pela app).
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?defina POSTGRES_USER no .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+      POSTGRES_DB: ${POSTGRES_DB:?defina POSTGRES_DB no .env}
+      # Autenticacao por senha com SCRAM-SHA-256 (nada de "trust").
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
+    networks:
+      - backend
+    # Roda direto como o usuario "postgres" (UID 70 na imagem alpine), em vez
+    # de comecar como root e trocar de usuario no entrypoint. Isso permite
+    # cap_drop ALL tambem no banco (o entrypoint so precisa de capabilities
+    # quando inicia como root para fazer chown/su).
+    user: "70:70"
+    read_only: true
+    volumes:
+      # Dados persistentes num volume nomeado (sobrevive a "down"/"up").
+      - db_data:/var/lib/postgresql/data
+    tmpfs:
+      # Socket Unix e arquivos temporarios do Postgres.
+      - /var/run/postgresql:rw,noexec,nosuid,size=1m,uid=70,gid=70,mode=0775
+      - /tmp:rw,noexec,nosuid,size=16m,uid=70,gid=70,mode=0700
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+          pids: 100
+    healthcheck:
+      # $$ = o "$" chega ao container sem ser interpolado pelo Compose.
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+networks:
+  # Rede de entrada: a da porta publicada.
+  frontend:
+    driver: bridge
+  # Rede interna: sem rota para fora (internal: true). O banco nao consegue
+  # nem sair para a internet, e nenhum container que esteja so na frontend
+  # consegue alcanca-lo.
+  backend:
+    driver: bridge
+    internal: true
+
+volumes:
+  app_data:
+  db_data:
+
+# Nenhum servico monta /var/run/docker.sock (isso daria controle total do
+# host a quem comprometer o container).
